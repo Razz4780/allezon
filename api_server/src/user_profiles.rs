@@ -9,7 +9,14 @@ use std::fmt::{self, Formatter};
 #[derive(Deserialize)]
 pub struct UserProfilesQuery {
     pub time_range: TimeRange,
-    pub limit: Option<u32>,
+    #[serde(default = "UserProfilesQuery::default_limit")]
+    pub limit: u32,
+}
+
+impl UserProfilesQuery {
+    fn default_limit() -> u32 {
+        200
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
