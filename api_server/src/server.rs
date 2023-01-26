@@ -1,4 +1,5 @@
 use crate::{
+    aggregates::{Aggregate, AggregatesQuery, AggregatesRow},
     user_profiles::{UserProfilesQuery, UserProfilesReply},
     user_tag::UserTag,
 };
@@ -47,7 +48,32 @@ impl Default for ApiServer {
                 response.into_response()
             });
 
-        let filter = user_tags.or(user_profiles).unify();
+        let aggregates = warp::path("aggregates")
+            .and(warp::query())
+            .and(warp::path::end())
+            .and(warp::post())
+            .map(|query: AggregatesQuery| {
+                // TODO query database for results
+                let sum_price = query
+                    .aggregates()
+                    .contains(&Aggregate::SumPrice)
+                    .then_some(0);
+                let count = query.aggregates().contains(&Aggregate::Count).then_some(0);
+                let rows = (0..query.time_range.buckets_count())
+                    .map(|_| AggregatesRow { sum_price, count })
+                    .collect::<Vec<_>>();
+
+                let response = query
+                    .make_reply(rows)
+                    .expect("invalid rows read from the database");
+                let response = warp::reply::json(&response);
+                let response = warp::reply::with_status(response, StatusCode::OK);
+                let response =
+                    warp::reply::with_header(response, "content-type", "application-json");
+                response.into_response()
+            });
+
+        let filter = user_tags.or(user_profiles).unify().or(aggregates).unify();
 
         Self {
             filter: filter.boxed(),

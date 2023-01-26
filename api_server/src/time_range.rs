@@ -26,10 +26,21 @@ pub type SimpleTimeRange = TimeRange<false>;
 
 pub type BucketsRange = TimeRange<true>;
 
+impl BucketsRange {
+    pub fn buckets_count(&self) -> usize {
+        (self.to - self.from).num_minutes().try_into().unwrap()
+    }
+
+    pub fn bucket_starts(&self) -> impl '_ + Iterator<Item = DateTime<Utc>> {
+        let count = i64::try_from(self.buckets_count()).unwrap();
+        (0..count).map(|idx| self.from + Duration::minutes(idx))
+    }
+}
+
 struct TimeRangeVisitor<const BUCKETS: bool>;
 
 const FORMAT_STR_MILLIS: &str = "%Y-%m-%dT%H:%M:%S%.3f";
-const FORMAT_STR_SECONDS: &str = "%Y-%m-%dT%H:%M:%S";
+pub const FORMAT_STR_SECONDS: &str = "%Y-%m-%dT%H:%M:%S";
 
 impl<'de, const BUCKETS: bool> Visitor<'de> for TimeRangeVisitor<BUCKETS> {
     type Value = TimeRange<BUCKETS>;
@@ -92,7 +103,7 @@ mod test {
     #[test]
     fn parse_datetime() {
         let expected = Utc
-            .with_ymd_and_hms(2022, 01, 12, 03, 45, 12)
+            .with_ymd_and_hms(2022, 1, 12, 3, 45, 12)
             .unwrap()
             .with_nanosecond(1000000)
             .unwrap();
@@ -103,7 +114,7 @@ mod test {
         );
         assert_eq!(expected, parsed);
 
-        let expected = Utc.with_ymd_and_hms(2022, 01, 12, 03, 45, 12).unwrap();
+        let expected = Utc.with_ymd_and_hms(2022, 1, 12, 3, 45, 12).unwrap();
         let as_str = "2022-01-12T03:45:12";
         let parsed: DateTime<Utc> = DateTime::from_utc(
             NaiveDateTime::parse_from_str(as_str, FORMAT_STR_SECONDS).unwrap(),
@@ -115,16 +126,16 @@ mod test {
     #[test]
     fn de_simpletimerange() {
         let expected = SimpleTimeRange {
-            from: Utc.with_ymd_and_hms(2022, 03, 22, 12, 15, 00).unwrap(),
-            to: Utc.with_ymd_and_hms(2022, 03, 22, 12, 30, 00).unwrap(),
+            from: Utc.with_ymd_and_hms(2022, 3, 22, 12, 15, 0).unwrap(),
+            to: Utc.with_ymd_and_hms(2022, 3, 22, 12, 30, 0).unwrap(),
         };
         let as_str = "\"2022-03-22T12:15:00.000_2022-03-22T12:30:00.000\"";
         let deserialized: SimpleTimeRange = serde_json::from_str(as_str).unwrap();
         assert_eq!(deserialized, expected);
 
         let expected = SimpleTimeRange {
-            from: Utc.with_ymd_and_hms(2022, 03, 22, 12, 15, 12).unwrap(),
-            to: Utc.with_ymd_and_hms(2022, 03, 22, 12, 30, 01).unwrap(),
+            from: Utc.with_ymd_and_hms(2022, 3, 22, 12, 15, 12).unwrap(),
+            to: Utc.with_ymd_and_hms(2022, 3, 22, 12, 30, 1).unwrap(),
         };
         let as_str = "\"2022-03-22T12:15:12.000_2022-03-22T12:30:01.000\"";
         let deserialized: SimpleTimeRange = serde_json::from_str(as_str).unwrap();
@@ -142,8 +153,8 @@ mod test {
     #[test]
     fn de_bucketsrange() {
         let expected = BucketsRange {
-            from: Utc.with_ymd_and_hms(2022, 03, 22, 12, 15, 00).unwrap(),
-            to: Utc.with_ymd_and_hms(2022, 03, 22, 12, 25, 00).unwrap(),
+            from: Utc.with_ymd_and_hms(2022, 3, 22, 12, 15, 0).unwrap(),
+            to: Utc.with_ymd_and_hms(2022, 3, 22, 12, 25, 0).unwrap(),
         };
 
         let as_str = "\"2022-03-22T12:15:00_2022-03-22T12:25:00\"";

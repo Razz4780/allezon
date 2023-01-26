@@ -1,6 +1,6 @@
-use chrono::SecondsFormat;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize, Serializer};
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -15,6 +15,15 @@ pub enum Device {
 pub enum Action {
     View,
     Buy,
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::View => f.write_str("VIEW"),
+            Self::Buy => f.write_str("BUY"),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
