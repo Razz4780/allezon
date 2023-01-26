@@ -181,4 +181,41 @@ mod test {
         let as_str = "\"2022-03-22T12:20:00_2022-03-22T12:31:00\"";
         serde_json::from_str::<BucketsRange>(as_str).unwrap_err();
     }
+
+    #[test]
+    fn buckets() {
+        let range = BucketsRange {
+            from: Utc.with_ymd_and_hms(2022, 3, 22, 12, 15, 0).unwrap(),
+            to: Utc.with_ymd_and_hms(2022, 3, 22, 12, 20, 0).unwrap(),
+        };
+
+        assert_eq!(range.buckets_count(), 5);
+
+        let starts = range
+            .bucket_starts()
+            .map(|s| s.format(FORMAT_STR_SECONDS).to_string())
+            .collect::<Vec<_>>();
+        let expected = vec![
+            "2022-03-22T12:15:00".to_string(),
+            "2022-03-22T12:16:00".to_string(),
+            "2022-03-22T12:17:00".to_string(),
+            "2022-03-22T12:18:00".to_string(),
+            "2022-03-22T12:19:00".to_string(),
+        ];
+        assert_eq!(starts, expected);
+
+        let range = BucketsRange {
+            from: Utc.with_ymd_and_hms(2022, 3, 22, 12, 15, 0).unwrap(),
+            to: Utc.with_ymd_and_hms(2022, 3, 22, 12, 15, 0).unwrap(),
+        };
+
+        assert_eq!(range.buckets_count(), 0);
+
+        let starts = range
+            .bucket_starts()
+            .map(|s| s.format(FORMAT_STR_SECONDS).to_string())
+            .collect::<Vec<_>>();
+        let expected: Vec<String> = Default::default();
+        assert_eq!(starts, expected);
+    }
 }
