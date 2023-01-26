@@ -3,11 +3,11 @@
 ## Komponenty
 ### Opcja 1
 1. NGINX - przyjmuje requesty i rozdziela między ApiServery.
-2. ApiServer - przyjmuje requesty. Wrzuca tagi na Kafkę, czyta agregaty i progile z baz danych.
+2. ApiServer - przyjmuje requesty. Wrzuca tagi na Kafkę, czyta agregaty i profile z Aerospike'a.
 3. Kafka - pośredniczy w konsumowaniu tagów.
-4. Consumer - czyta tagi z Kafki i robi update'y baz danych.
-5. ??? - baza danych do przechowywania profili użytkowników. Chyba wystarczy jakikolwiek key-value store, bo nie trzeba na tym robić żadnych query poza wyciąganiem wartości spod klucza. MongoDB może w [jednym requeście](https://stackoverflow.com/questions/29932723/how-to-limit-an-array-size-in-mongodb) dodać zdarzenie i przyciąć listę do ostatnich 200 elementów. Moglibyśmy trzymać dwie listy dla każdego użytkownika: `BUY` i `VIEW`.
-6. ??? - baza danych do przechowywania agregatów. Tutaj to nie mam pojęcia :) Typ mówił, że Aerospike jest spoko + widziałem, że jest klient dla Rusta.
+4. Consumer - czyta tagi z Kafki i pisze do Aerospike'a.
+5. Aerospike - przechowuje wszystkie dane. Dane trzymamy w czterech setach: `buy-profiles`, `view-profiles`, `buy-aggregates` i `view-aggregates`. Sety dla profili trzymają rekordy o dwóch binach: `cookie_id` i `user_tags`, gdzie `user_tags` to mapa z timestampu w tagi. Indeks na `cookie_id` pozwoli na szybkie wyciągnięcie danych. Sety dla agregatów trzymają rekordy o binach: `timestamp` (przycięty do pełnej minuty), `origin`, `brand_id`, `category_id`, `count`, `sum_price`. Kombinacji `origin`, `brand_id` i `category_id` jest 16750000, ale limit na liczbę tagów w trakcie minuty wynosi 60000. Request `aggregates` ma timeout 60s. Czy wystarczający będzie indeks po `timestamp`?
+6. GarbageCollector - nie musimy przechowywać danych starszych niż 24h, ale licząc od timestampu z ostatniego odebranego taga. To sprawia, że chyba nie możemy ustawić TTL na rekordach w Aerospike'u. GarbageCollector czyta tagi z Kafki i co jakiś czas wywala stare rekordy z `buy-aggregates` i `view-aggregates`.
 
 ### Opcja 2
 1. NGINX - przyjmuje requesty i rozdziela między ApiServery.
