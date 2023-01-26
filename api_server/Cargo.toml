@@ -15,5 +15,8 @@ log = "0.4.17"
 env_logger = "0.10.0"
 serde = { version = "1.0.152", features = ["derive"] }
 
-#[dev-dependencies]
+[dev-dependencies]
 serde_json = "1.0.91"
+
+[features]
+only_echo = []

@@ -1,14 +1,30 @@
 use anyhow::Context;
-use api_server::server::ApiServer;
 use clap::Parser;
 use std::{net::SocketAddr, process::ExitCode};
-use tokio::{signal, sync::oneshot};
+use tokio::{
+    signal,
+    sync::oneshot::{self, Receiver},
+};
 
 #[derive(Parser)]
 struct Args {
     /// Address of the socket this server will listen on.
     #[arg(short, long, default_value = "127.0.0.1:8080")]
     address: SocketAddr,
+}
+
+#[cfg(not(feature = "only_echo"))]
+async fn run_server(args: Args, stop: Receiver<()>) -> anyhow::Result<()> {
+    use api_server::server::ApiServer;
+
+    ApiServer::default().run(args.address, stop).await
+}
+
+#[cfg(feature = "only_echo")]
+async fn run_server(args: Args, stop: Receiver<()>) -> anyhow::Result<()> {
+    use api_server::dummy_server::DummyServer;
+
+    DummyServer::default().run(args.address, stop).await
 }
 
 #[tokio::main]
@@ -27,7 +43,7 @@ async fn main() -> ExitCode {
             tx.send(()).ok();
             Ok(())
         },
-        ApiServer::default().run(args.address, rx),
+        run_server(args, rx),
     );
 
     match res {
