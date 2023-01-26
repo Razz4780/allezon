@@ -1,6 +1,6 @@
 use crate::{aggregates::AggregatesQuery, user_profiles::UserProfilesQuery};
 use anyhow::Context;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str};
 use tokio::sync::oneshot::Receiver;
 use warp::{
     filters::BoxedFilter, http::StatusCode, hyper::body::Bytes, reply::Response, Filter, Reply,
@@ -17,6 +17,9 @@ impl Default for DummyServer {
             .and(warp::post())
             .and(warp::body::bytes())
             .map(|body: Bytes| {
+                let expected = str::from_utf8(body.as_ref());
+                log::info!("Expected response for user_tags: {:?}", expected);
+
                 let response = warp::reply::with_status(body.to_vec(), StatusCode::NO_CONTENT);
                 let response =
                     warp::reply::with_header(response, "content-type", "application/json");
@@ -29,7 +32,15 @@ impl Default for DummyServer {
             .and(warp::path::end())
             .and(warp::post())
             .and(warp::body::bytes())
-            .map(|_cookie: String, _query: UserProfilesQuery, body: Bytes| {
+            .map(|cookie: String, query: UserProfilesQuery, body: Bytes| {
+                let expected = str::from_utf8(body.as_ref());
+                log::info!(
+                    "Expected response for user_profiles with cookie {} and query {:?}: {:?}",
+                    cookie,
+                    query,
+                    expected
+                );
+
                 let response = warp::reply::with_status(body.to_vec(), StatusCode::OK);
                 let response =
                     warp::reply::with_header(response, "content-type", "application-json");
@@ -41,7 +52,14 @@ impl Default for DummyServer {
             .and(warp::path::end())
             .and(warp::post())
             .and(warp::body::bytes())
-            .map(|_query: AggregatesQuery, body: Bytes| {
+            .map(|query: AggregatesQuery, body: Bytes| {
+                let expected = str::from_utf8(body.as_ref());
+                log::info!(
+                    "Expected response for aggregates with query {:?}: {:?}",
+                    query,
+                    expected
+                );
+
                 let response = warp::reply::with_status(body.to_vec(), StatusCode::OK);
                 let response =
                     warp::reply::with_header(response, "content-type", "application-json");

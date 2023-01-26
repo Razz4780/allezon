@@ -1,7 +1,7 @@
 use crate::{time_range::SimpleTimeRange, user_tag::UserTag};
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct UserProfilesQuery {
     pub time_range: SimpleTimeRange,
     #[serde(default = "UserProfilesQuery::default_limit")]
