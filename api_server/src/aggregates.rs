@@ -5,7 +5,7 @@ use crate::{
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use std::fmt::{self, Display, Formatter};
 
-#[derive(Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Debug)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Aggregate {
     Count,
@@ -21,14 +21,14 @@ impl Display for Aggregate {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct AggregatesQuery {
     pub time_range: BucketsRange,
     pub action: Action,
     pub origin: Option<String>,
     pub brand_id: Option<String>,
     pub category_id: Option<String>,
-    aggregates: Vec<Aggregate>,
+    pub aggregates: Vec<Aggregate>,
 }
 
 impl AggregatesQuery {
@@ -59,11 +59,13 @@ impl AggregatesQuery {
     }
 }
 
+#[derive(Debug)]
 pub struct AggregatesRow {
     pub sum_price: Option<usize>,
     pub count: Option<usize>,
 }
 
+#[derive(Debug)]
 pub struct AggregatesReply {
     query: AggregatesQuery,
     rows: Vec<AggregatesRow>,
@@ -131,5 +133,61 @@ impl Serialize for AggregatesReply {
         root.serialize_field("rows", &rows)?;
 
         root.end()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn make_reply() {
+        let time_range: BucketsRange =
+            serde_json::from_str("\"2022-03-22T12:15:00_2022-03-22T12:17:00\"").unwrap();
+        let query = AggregatesQuery {
+            time_range,
+            action: Action::Buy,
+            origin: None,
+            brand_id: None,
+            category_id: None,
+            aggregates: vec![Aggregate::Count],
+        };
+
+        query
+            .clone()
+            .make_reply(vec![
+                AggregatesRow {
+                    sum_price: None,
+                    count: Some(1),
+                },
+                AggregatesRow {
+                    sum_price: Some(2),
+                    count: Some(4),
+                },
+            ])
+            .unwrap();
+
+        // Invalid row count.
+        query
+            .clone()
+            .make_reply(vec![AggregatesRow {
+                sum_price: None,
+                count: Some(1),
+            }])
+            .unwrap_err();
+
+        // Missing "count" aggregate.
+        query
+            .make_reply(vec![
+                AggregatesRow {
+                    sum_price: None,
+                    count: None,
+                },
+                AggregatesRow {
+                    sum_price: Some(2),
+                    count: None,
+                },
+            ])
+            .unwrap_err();
     }
 }

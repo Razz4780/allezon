@@ -2,7 +2,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use std::fmt::{self, Display, Formatter};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Copy)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Device {
     Pc,
@@ -10,7 +10,7 @@ pub enum Device {
     Tv,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Action {
     View,
