@@ -28,7 +28,7 @@ impl Display for Action {
 
 #[derive(Deserialize, Serialize)]
 pub struct ProductInfo {
-    pub product_id: String,
+    pub product_id: i32,
     pub brand_id: String,
     pub category_id: String,
     pub price: i32,
@@ -39,6 +39,7 @@ pub struct UserTag {
     #[serde(serialize_with = "serialize_datetime")]
     pub time: DateTime<Utc>,
     pub cookie: String,
+    pub country: String,
     pub device: Device,
     pub action: Action,
     pub origin: String,
