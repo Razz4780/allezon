@@ -5,7 +5,7 @@ use rdkafka::{
     ClientConfig,
 };
 use serde::Serialize;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 pub struct EventProducer {
     producer: FutureProducer,
@@ -18,7 +18,7 @@ impl EventProducer {
         servers: &[SocketAddr],
         topic: String,
         delivery_timeout_ms: u16,
-        enqueue_timeout: Timeout,
+        enqueue_timeout_ms: u16,
     ) -> anyhow::Result<Self> {
         let producer: FutureProducer = ClientConfig::new()
             .set(
@@ -36,7 +36,7 @@ impl EventProducer {
         Ok(Self {
             producer,
             topic,
-            enqueue_timeout,
+            enqueue_timeout: Duration::from_millis(enqueue_timeout_ms.into()).into(),
         })
     }
 

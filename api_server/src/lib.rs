@@ -1,4 +1,5 @@
 pub mod aggregates;
+pub mod app;
 pub mod server;
 pub mod time_range;
 pub mod user_profiles;
