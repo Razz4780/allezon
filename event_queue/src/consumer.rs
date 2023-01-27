@@ -1,5 +1,4 @@
 use anyhow::Context;
-use api_server::user_tag::UserTag;
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
 use rdkafka::{
@@ -7,18 +6,21 @@ use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     Message,
 };
+use serde::Deserialize;
 use std::net::SocketAddr;
 
 #[async_trait]
-pub trait TagProcessor {
-    async fn process(&self, tag: UserTag) -> anyhow::Result<()>;
+pub trait EventProcessor {
+    type Event<'a>: Deserialize<'a>;
+
+    async fn process(&self, event: Self::Event<'_>) -> anyhow::Result<()>;
 }
 
-pub struct TagStream {
+pub struct EventStream {
     consumer: StreamConsumer,
 }
 
-impl TagStream {
+impl EventStream {
     pub fn new(servers: &[SocketAddr], group: String, topic: String) -> anyhow::Result<Self> {
         let consumer: StreamConsumer = ClientConfig::new()
             .set(
@@ -29,7 +31,6 @@ impl TagStream {
                     .collect::<Vec<_>>()
                     .join(","),
             )
-            .set("fetch.min.bytes", "50")
             .set("group.id", group)
             .set("auto.offset.reset", "earliest")
             .set("enable.auto.commit", "true")
@@ -44,20 +45,20 @@ impl TagStream {
         Ok(Self { consumer })
     }
 
-    pub async fn consume<P: TagProcessor>(&self, processor: &P) -> anyhow::Result<()> {
+    pub async fn consume<P: EventProcessor>(&self, processor: &P) -> anyhow::Result<()> {
         self.consumer
             .stream()
             .map_err(anyhow::Error::from)
             .map_err(|e| e.context("failed to receive message from Kafka"))
             .try_for_each(move |msg| async move {
                 let payload = msg.payload().unwrap_or(&[]);
-                let tag: UserTag = serde_json::from_slice(payload).with_context(|| {
+                let event: P::Event<'_> = serde_json::from_slice(payload).with_context(|| {
                     format!("failed to deserialize message payload {:?}", payload)
                 })?;
                 processor
-                    .process(tag)
+                    .process(event)
                     .await
-                    .context("tag consumer failed")?;
+                    .context("event consumer failed")?;
 
                 self.consumer
                     .store_offset_from_message(&msg)

@@ -1,3 +1,3 @@
 [workspace]
 
-members = ["api_server", "tag_queue"]
+members = ["api_server", "event_queue"]
