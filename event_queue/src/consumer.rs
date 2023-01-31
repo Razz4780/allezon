@@ -6,14 +6,14 @@ use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     Message,
 };
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use std::net::SocketAddr;
 
 #[async_trait]
 pub trait EventProcessor {
-    type Event<'a>: Deserialize<'a>;
+    type Event: DeserializeOwned;
 
-    async fn process(&self, event: Self::Event<'_>) -> anyhow::Result<()>;
+    async fn process(&self, event: Self::Event) -> anyhow::Result<()>;
 }
 
 pub struct EventStream {
@@ -52,7 +52,7 @@ impl EventStream {
             .map_err(|e| e.context("failed to receive message from Kafka"))
             .try_for_each(move |msg| async move {
                 let payload = msg.payload().unwrap_or(&[]);
-                let event: P::Event<'_> = serde_json::from_slice(payload).with_context(|| {
+                let event: P::Event = serde_json::from_slice(payload).with_context(|| {
                     format!("failed to deserialize message payload {:?}", payload)
                 })?;
                 processor

@@ -5,21 +5,15 @@ use rdkafka::{
     ClientConfig,
 };
 use serde::Serialize;
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
 
 pub struct EventProducer {
     producer: FutureProducer,
     topic: String,
-    enqueue_timeout: Timeout,
 }
 
 impl EventProducer {
-    pub fn new(
-        servers: &[SocketAddr],
-        topic: String,
-        delivery_timeout_ms: u16,
-        enqueue_timeout_ms: u16,
-    ) -> anyhow::Result<Self> {
+    pub fn new(servers: &[SocketAddr], topic: String) -> anyhow::Result<Self> {
         let producer: FutureProducer = ClientConfig::new()
             .set(
                 "bootstrap.servers",
@@ -29,15 +23,10 @@ impl EventProducer {
                     .collect::<Vec<_>>()
                     .join(","),
             )
-            .set("delivery.timeout.ms", delivery_timeout_ms.to_string())
             .create()
             .context("failed to build the Kafka producer")?;
 
-        Ok(Self {
-            producer,
-            topic,
-            enqueue_timeout: Duration::from_millis(enqueue_timeout_ms.into()).into(),
-        })
+        Ok(Self { producer, topic })
     }
 
     pub async fn produce<E: Serialize>(&self, event: &E) -> anyhow::Result<()> {
@@ -52,7 +41,7 @@ impl EventProducer {
         };
 
         self.producer
-            .send(record, self.enqueue_timeout)
+            .send(record, Timeout::Never)
             .await
             .map_err(|(e, _)| e)
             .context("failed to send message to Kafka")?;

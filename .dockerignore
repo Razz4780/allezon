@@ -1,0 +1,7 @@
+.github
+.git
+.gitignore
+README.md
+SPEC_COPY.md
+Cargo.lock
+target
