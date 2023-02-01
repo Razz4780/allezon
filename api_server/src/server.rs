@@ -1,10 +1,11 @@
 use crate::{
     aggregates::{Aggregate, AggregatesQuery, AggregatesRow},
+    app::App,
     user_profiles::{UserProfilesQuery, UserProfilesReply},
     user_tag::UserTag,
 };
 use anyhow::Context;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::oneshot::Receiver;
 use warp::{filters::BoxedFilter, http::StatusCode, reply::Response, Filter, Reply};
 
@@ -12,20 +13,33 @@ pub struct ApiServer {
     filter: BoxedFilter<(Response,)>,
 }
 
-impl Default for ApiServer {
-    fn default() -> Self {
+impl ApiServer {
+    pub fn new(app: Arc<App>) -> Self {
         let user_tags = warp::path("user_tags")
             .and(warp::path::end())
             .and(warp::post())
             .and(warp::body::json())
-            .map(|user_tag: UserTag| {
-                // TODO push user tag to Kafka
-
-                let response = warp::reply::json(&user_tag);
-                let response = warp::reply::with_status(response, StatusCode::NO_CONTENT);
-                let response =
-                    warp::reply::with_header(response, "content-type", "application/json");
-                response.into_response()
+            .then(move |user_tag: UserTag| {
+                let app = app.clone();
+                async move {
+                    match app.send_tag(&user_tag).await {
+                        Ok(()) => {
+                            let response = warp::reply::json(&user_tag);
+                            let response =
+                                warp::reply::with_status(response, StatusCode::NO_CONTENT);
+                            let response = warp::reply::with_header(
+                                response,
+                                "content-type",
+                                "application/json",
+                            );
+                            response.into_response()
+                        }
+                        Err(e) => {
+                            log::error!("Failed to send user tag to Kafka: {:?}", e);
+                            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                        }
+                    }
+                }
             });
 
         let user_profiles = warp::path("user_profiles")
@@ -79,9 +93,7 @@ impl Default for ApiServer {
             filter: filter.boxed(),
         }
     }
-}
 
-impl ApiServer {
     pub async fn run(self, socket: SocketAddr, stop: Receiver<()>) -> anyhow::Result<()> {
         let stop = async move {
             stop.await.ok();

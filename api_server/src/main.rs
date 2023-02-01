@@ -1,28 +1,45 @@
 use anyhow::Context;
-use clap::Parser;
+use serde::Deserialize;
 use std::{net::SocketAddr, process::ExitCode};
 use tokio::{
     signal,
     sync::oneshot::{self, Receiver},
 };
 
-#[derive(Parser)]
+#[cfg(not(feature = "only_echo"))]
+#[derive(Deserialize, Debug)]
 struct Args {
-    /// Address of the socket this server will listen on.
-    #[arg(short, long, default_value = "127.0.0.1:8080")]
+    address: SocketAddr,
+    kafka_brokers: Vec<SocketAddr>,
+    kafka_topic: String,
+}
+
+#[cfg(feature = "only_echo")]
+#[derive(Deserialize, Debug)]
+struct Args {
     address: SocketAddr,
 }
 
 #[cfg(not(feature = "only_echo"))]
-async fn run_server(args: Args, stop: Receiver<()>) -> anyhow::Result<()> {
-    use api_server::server::ApiServer;
+async fn run_server(stop: Receiver<()>) -> anyhow::Result<()> {
+    use api_server::{app::App, server::ApiServer};
+    use event_queue::producer::EventProducer;
 
-    ApiServer::default().run(args.address, stop).await
+    let args: Args =
+        envy::from_env().context("failed to read configuration from environment variables")?;
+
+    let producer = EventProducer::new(&args.kafka_brokers, args.kafka_topic)?;
+    let app = App::new(producer);
+
+    ApiServer::new(app.into()).run(args.address, stop).await
 }
 
 #[cfg(feature = "only_echo")]
-async fn run_server(args: Args, stop: Receiver<()>) -> anyhow::Result<()> {
+async fn run_server(stop: Receiver<()>) -> anyhow::Result<()> {
     use api_server::dummy_server::DummyServer;
+
+    let args: Args =
+        envy::from_env().context("failed to read configuration from environment variables")?;
 
     DummyServer::default().run(args.address, stop).await
 }
@@ -30,8 +47,6 @@ async fn run_server(args: Args, stop: Receiver<()>) -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() -> ExitCode {
     env_logger::init();
-
-    let args = Args::parse();
 
     let (tx, rx) = oneshot::channel();
     let res = tokio::try_join!(
@@ -43,7 +58,7 @@ async fn main() -> ExitCode {
             tx.send(()).ok();
             Ok(())
         },
-        run_server(args, rx),
+        run_server(rx),
     );
 
     match res {

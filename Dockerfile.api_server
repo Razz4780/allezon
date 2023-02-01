@@ -1,0 +1,11 @@
+FROM rust:1.66-slim-buster as builder
+RUN apt-get -y update && apt-get install -y cmake g++
+WORKDIR /usr/src
+COPY api_server api_server/
+COPY event_queue event_queue/
+WORKDIR /usr/src/api_server
+RUN cargo install --path .
+
+FROM debian:buster-slim
+COPY --from=builder /usr/local/cargo/bin/api_server /usr/local/bin/api_server
+CMD ["api_server"]

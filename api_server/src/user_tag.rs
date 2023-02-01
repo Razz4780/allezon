@@ -2,7 +2,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use std::fmt::{self, Display, Formatter};
 
-#[derive(Deserialize, Serialize, Clone, Copy)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Device {
     Pc,
@@ -26,7 +26,7 @@ impl Display for Action {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct ProductInfo {
     pub product_id: i32,
     pub brand_id: String,
@@ -34,7 +34,7 @@ pub struct ProductInfo {
     pub price: i32,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct UserTag {
     #[serde(serialize_with = "serialize_datetime")]
     pub time: DateTime<Utc>,
