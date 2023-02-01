@@ -32,6 +32,8 @@ pub struct AggregatesQuery {
 }
 
 impl AggregatesQuery {
+    const KEY_DELIMITER: &str = "|||";
+
     pub fn aggregates(&self) -> &[Aggregate] {
         &self.aggregates
     }
@@ -56,6 +58,38 @@ impl AggregatesQuery {
         }
 
         Ok(AggregatesReply { query: self, rows })
+    }
+
+    pub fn db_set_name(&self) -> String {
+        let mut ret: String = match self.action {
+            Action::Buy => "buy",
+            Action::View => "view",
+        }
+        .into();
+        if self.origin.is_some() {
+            ret += "-origin";
+        }
+        if self.brand_id.is_some() {
+            ret += "-brand_id";
+        }
+        if self.category_id.is_some() {
+            ret += "-category_id";
+        }
+        ret
+    }
+
+    pub fn db_user_key(&self) -> String {
+        let mut ret = "PK".into();
+        if let Some(origin) = &self.origin {
+            ret = format!("{}{}{}", ret, Self::KEY_DELIMITER, origin);
+        }
+        if let Some(brand_id) = &self.brand_id {
+            ret = format!("{}{}{}", ret, Self::KEY_DELIMITER, brand_id);
+        }
+        if let Some(category_id) = &self.category_id {
+            ret = format!("{}{}{}", ret, Self::KEY_DELIMITER, category_id);
+        }
+        ret
     }
 }
 
