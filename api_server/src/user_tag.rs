@@ -26,7 +26,7 @@ impl Display for Action {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ProductInfo {
     pub product_id: i32,
     pub brand_id: String,
@@ -34,7 +34,7 @@ pub struct ProductInfo {
     pub price: i32,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct UserTag {
     #[serde(serialize_with = "serialize_datetime")]
     pub time: DateTime<Utc>,

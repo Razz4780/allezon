@@ -32,8 +32,6 @@ pub struct AggregatesQuery {
 }
 
 impl AggregatesQuery {
-    const KEY_DELIMITER: &str = "|||";
-
     pub fn aggregates(&self) -> &[Aggregate] {
         &self.aggregates
     }
@@ -74,20 +72,6 @@ impl AggregatesQuery {
         }
         if self.category_id.is_some() {
             ret += "-category_id";
-        }
-        ret
-    }
-
-    pub fn db_user_key(&self) -> String {
-        let mut ret = "PK".into();
-        if let Some(origin) = &self.origin {
-            ret = format!("{}{}{}", ret, Self::KEY_DELIMITER, origin);
-        }
-        if let Some(brand_id) = &self.brand_id {
-            ret = format!("{}{}{}", ret, Self::KEY_DELIMITER, brand_id);
-        }
-        if let Some(category_id) = &self.category_id {
-            ret = format!("{}{}{}", ret, Self::KEY_DELIMITER, category_id);
         }
         ret
     }
