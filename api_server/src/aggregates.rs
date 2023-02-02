@@ -32,6 +32,57 @@ pub struct AggregatesQuery {
 }
 
 impl AggregatesQuery {
+    pub fn from_pairs(pairs: Vec<(String, String)>) -> Option<Self> {
+        let mut time_range = None;
+        let mut action = None;
+        let mut origin = None;
+        let mut brand_id = None;
+        let mut category_id = None;
+        let mut aggregates = Vec::new();
+
+        for (key, value) in pairs.into_iter() {
+            let value = format!("\"{}\"", value);
+            match key.as_str() {
+                "time_range" if time_range.is_none() => {
+                    time_range = Some(serde_json::from_str(&value).ok()?);
+                }
+                "action" if action.is_none() => {
+                    action = Some(serde_json::from_str(&value).ok()?);
+                }
+                "origin" if origin.is_none() => {
+                    origin = Some(serde_json::from_str(&value).ok()?);
+                }
+                "brand_id" if brand_id.is_none() => {
+                    brand_id = Some(serde_json::from_str(&value).ok()?);
+                }
+                "category_id" if category_id.is_none() => {
+                    category_id = Some(serde_json::from_str(&value).ok()?);
+                }
+                "aggregates" if aggregates.len() < 2 => {
+                    let aggregate = serde_json::from_str(&value).ok()?;
+                    if aggregates.contains(&aggregate) {
+                        return None;
+                    }
+                    aggregates.push(aggregate);
+                }
+                _ => {
+                    return None;
+                }
+            }
+        }
+        match (time_range, action) {
+            (Some(time_range), Some(action)) if !aggregates.is_empty() => Some(Self {
+                time_range,
+                action,
+                origin,
+                brand_id,
+                category_id,
+                aggregates,
+            }),
+            _ => None,
+        }
+    }
+
     pub fn aggregates(&self) -> &[Aggregate] {
         &self.aggregates
     }
@@ -77,7 +128,7 @@ impl AggregatesQuery {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AggregatesRow {
     pub sum_price: Option<usize>,
     pub count: Option<usize>,

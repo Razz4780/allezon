@@ -12,7 +12,7 @@ pub struct ApiServer {
 }
 
 impl ApiServer {
-    pub fn new(app: Arc<App>) -> Self {
+    pub fn new(app: Arc<App>, db_addr: SocketAddr) -> Self {
         let user_tags = warp::path("user_tags")
             .and(warp::path::end())
             .and(warp::post())
@@ -46,7 +46,7 @@ impl ApiServer {
             .and(warp::path::end())
             .and(warp::post())
             .then(move |cookie: String, query: UserProfilesQuery| async move {
-                match db_query::get_user_profile(cookie, &query).await {
+                match db_query::get_user_profile(cookie, &query, &db_addr).await {
                     Ok(reply) => {
                         let response = warp::reply::json(&reply);
                         let response = warp::reply::with_status(response, StatusCode::OK);
@@ -65,19 +65,26 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
-            .then(move |query: AggregatesQuery| async move {
-                match db_query::get_aggregate(query).await {
-                    Ok(reply) => {
-                        let response = warp::reply::json(&reply);
-                        let response = warp::reply::with_status(response, StatusCode::OK);
-                        let response =
-                            warp::reply::with_header(response, "content-type", "application-json");
-                        response.into_response()
+            .then(move |query: Vec<(String, String)>| async move {
+                if let Some(query) = AggregatesQuery::from_pairs(query) {
+                    match db_query::get_aggregate(query, &db_addr).await {
+                        Ok(reply) => {
+                            let response = warp::reply::json(&reply);
+                            let response = warp::reply::with_status(response, StatusCode::OK);
+                            let response = warp::reply::with_header(
+                                response,
+                                "content-type",
+                                "application-json",
+                            );
+                            response.into_response()
+                        }
+                        Err(e) => {
+                            log::error!("Failed to query database: {}", e);
+                            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                        }
                     }
-                    Err(e) => {
-                        log::error!("Failed to query database: {}", e);
-                        StatusCode::INTERNAL_SERVER_ERROR.into_response()
-                    }
+                } else {
+                    StatusCode::BAD_REQUEST.into_response()
                 }
             });
 

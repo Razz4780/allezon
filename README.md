@@ -9,7 +9,7 @@ Configuration is passed through environment variables:
 3. `kafka_topic` - a topic for user tags in Kafka
 
 ## Consumer
-Consumer user tags from Kafka and writes to Aerospike. To build the container, run `docker build -f Dockerfile.consumer .` in the root of the project.
+Consumer uses tags from Kafka and writes to Aerospike. To build the container, run `docker build -f Dockerfile.consumer .` in the root of the project.
 
 Configuration is passed through environment variables:
 1. `kafka_brokers` - a comma-separated list of Kafka instances this app will initially connect to (socket addresses)

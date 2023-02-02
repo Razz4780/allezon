@@ -10,6 +10,7 @@ use tokio::{
 #[derive(Deserialize, Debug)]
 struct Args {
     address: SocketAddr,
+    aerospike_rest: SocketAddr,
     kafka_brokers: Vec<SocketAddr>,
     kafka_topic: String,
 }
@@ -31,7 +32,9 @@ async fn run_server(stop: Receiver<()>) -> anyhow::Result<()> {
     let producer = EventProducer::new(&args.kafka_brokers, args.kafka_topic)?;
     let app = App::new(producer);
 
-    ApiServer::new(app.into()).run(args.address, stop).await
+    ApiServer::new(app.into(), args.aerospike_rest)
+        .run(args.address, stop)
+        .await
 }
 
 #[cfg(feature = "only_echo")]
