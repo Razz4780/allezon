@@ -43,7 +43,7 @@ impl Default for DummyServer {
 
                 let response = warp::reply::with_status(body.to_vec(), StatusCode::OK);
                 let response =
-                    warp::reply::with_header(response, "content-type", "application-json");
+                    warp::reply::with_header(response, "content-type", "application/json");
                 response.into_response()
             });
 
@@ -52,18 +52,23 @@ impl Default for DummyServer {
             .and(warp::path::end())
             .and(warp::post())
             .and(warp::body::bytes())
-            .map(|query: AggregatesQuery, body: Bytes| {
-                let expected = str::from_utf8(body.as_ref());
-                log::info!(
-                    "Expected response for aggregates with query {:?}: {:?}",
-                    query,
-                    expected
-                );
+            .map(|query: Vec<(String, String)>, body: Bytes| {
+                if let Some(query) = AggregatesQuery::from_pairs(query) {
+                    let expected = str::from_utf8(body.as_ref());
+                    log::info!(
+                        "Expected response for aggregates with query {:?}: {:?}",
+                        query,
+                        expected
+                    );
 
-                let response = warp::reply::with_status(body.to_vec(), StatusCode::OK);
-                let response =
-                    warp::reply::with_header(response, "content-type", "application-json");
-                response.into_response()
+                    let response = warp::reply::with_status(body.to_vec(), StatusCode::OK);
+                    let response =
+                        warp::reply::with_header(response, "content-type", "application/json");
+                    response.into_response()
+                } else {
+                    log::warn!("Invalid aggregates query");
+                    StatusCode::BAD_REQUEST.into_response()
+                }
             });
 
         let filter = user_tags.or(user_profiles).unify().or(aggregates).unify();

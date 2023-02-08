@@ -1,5 +1,8 @@
 use crate::{
-    aggregates::AggregatesQuery, app::App, db_query, user_profiles::UserProfilesQuery,
+    aggregates::{AggregatesQuery, AggregatesReply},
+    app::App,
+    db_query,
+    user_profiles::{UserProfilesQuery, UserProfilesReply},
     user_tag::UserTag,
 };
 use anyhow::Context;
@@ -45,13 +48,17 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
-            .then(move |cookie: String, query: UserProfilesQuery| async move {
-                match db_query::get_user_profile(cookie, &query, &db_addr).await {
+            .and(warp::body::json())
+            .then(move |cookie: String, query: UserProfilesQuery, body: UserProfilesReply| async move {
+                match db_query::get_user_profile(cookie, &query, db_addr).await {
                     Ok(reply) => {
+                        if reply != body {
+                            log::error!("Expected {:?}, got: {:?}", body, reply);
+                        }
                         let response = warp::reply::json(&reply);
                         let response = warp::reply::with_status(response, StatusCode::OK);
                         let response =
-                            warp::reply::with_header(response, "content-type", "application-json");
+                            warp::reply::with_header(response, "content-type", "application/json");
                         response.into_response()
                     }
                     Err(e) => {
@@ -65,28 +72,34 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
-            .then(move |query: Vec<(String, String)>| async move {
-                if let Some(query) = AggregatesQuery::from_pairs(query) {
-                    match db_query::get_aggregate(query, &db_addr).await {
-                        Ok(reply) => {
-                            let response = warp::reply::json(&reply);
-                            let response = warp::reply::with_status(response, StatusCode::OK);
-                            let response = warp::reply::with_header(
-                                response,
-                                "content-type",
-                                "application-json",
-                            );
-                            response.into_response()
+            .and(warp::body::json())
+            .then(
+                move |query: Vec<(String, String)>, body: AggregatesReply| async move {
+                    if let Some(query) = AggregatesQuery::from_pairs(query) {
+                        match db_query::get_aggregate(query, db_addr).await {
+                            Ok(reply) => {
+                                if reply != body {
+                                    log::error!("Expected {:?}, got: {:?}", body, reply);
+                                }
+                                let response = warp::reply::json(&reply);
+                                let response = warp::reply::with_status(response, StatusCode::OK);
+                                let response = warp::reply::with_header(
+                                    response,
+                                    "content-type",
+                                    "application/json",
+                                );
+                                response.into_response()
+                            }
+                            Err(e) => {
+                                log::error!("Failed to query database: {}", e);
+                                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                            }
                         }
-                        Err(e) => {
-                            log::error!("Failed to query database: {}", e);
-                            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-                        }
+                    } else {
+                        StatusCode::BAD_REQUEST.into_response()
                     }
-                } else {
-                    StatusCode::BAD_REQUEST.into_response()
-                }
-            });
+                },
+            );
 
         let filter = user_tags.or(user_profiles).unify().or(aggregates).unify();
 

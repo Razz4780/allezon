@@ -2,8 +2,8 @@ use anyhow::Context;
 use api_server::{
     db_query::{
         time_to_int_aggregate, time_to_int_user_profile, AggregateRecord, UserProfileRecord,
-        AS_BUY_PROFILES_SET, AS_KVS_BASE, AS_NAMESPACE, AS_OPERATE_BASE, AS_QUERY_PARAMS,
-        AS_VIEW_PROFILES_SET,
+        AS_BUY_PROFILES_SET, AS_INDEX_BASE, AS_KVS_BASE, AS_NAMESPACE, AS_OPERATE_BASE,
+        AS_QUERY_PARAMS, AS_VIEW_PROFILES_SET,
     },
     user_tag::{Action, UserTag},
 };
@@ -36,7 +36,7 @@ struct UserTagPropertyCombinations {
 }
 
 impl UserTagPropertyCombinations {
-    const DELIMITER: &str = "___";
+    const DELIMITER: &str = "---";
 
     fn new(tag: &UserTag) -> Self {
         Self {
@@ -98,12 +98,59 @@ impl std::iter::Iterator for UserTagPropertyCombinations {
     }
 }
 
+async fn create_sindices(db_addr: SocketAddr) -> anyhow::Result<()> {
+    let view_combinations = UserTagPropertyCombinations {
+        x: 0,
+        action: Action::View,
+        origin: "".into(),
+        brand_id: "".into(),
+        category_id: "".into(),
+        time: 0,
+    };
+    let buy_combinations = UserTagPropertyCombinations {
+        x: 0,
+        action: Action::Buy,
+        origin: "".into(),
+        brand_id: "".into(),
+        category_id: "".into(),
+        time: 0,
+    };
+
+    for db_names in view_combinations
+        .into_iter()
+        .chain(buy_combinations.into_iter())
+    {
+        let idx_name = format!("{}_idx", db_names.set);
+        let request = CreateIndexRequest {
+            type_: IndexType::Numeric,
+            name: idx_name.clone(),
+            namespace: AS_NAMESPACE.into(),
+            set: db_names.set,
+            bin: "time".into(),
+        };
+        let url = format!("http://{}/{}?{}", db_addr, AS_INDEX_BASE, AS_QUERY_PARAMS);
+        let client = Client::new();
+
+        let res = client.post(url).json(&request).send().await?;
+        match res.status() {
+            StatusCode::ACCEPTED | StatusCode::CONFLICT => {}
+            _ => anyhow::bail!(
+                "Could not create sindex {}: {} {:?}",
+                idx_name,
+                res.status(),
+                res.text().await?
+            ),
+        }
+    }
+    Ok(())
+}
+
 struct Processor {
     db_addr: SocketAddr,
 }
 
 impl Processor {
-    async fn add_to_user_profiles(tag: UserTag, db_addr: &SocketAddr) -> anyhow::Result<()> {
+    async fn add_to_user_profiles(tag: UserTag, db_addr: SocketAddr) -> anyhow::Result<()> {
         let cookie = tag.cookie.clone();
         let set = match tag.action {
             Action::Buy => AS_BUY_PROFILES_SET,
@@ -155,7 +202,7 @@ impl Processor {
     async fn add_to_aggregates(
         tag: UserTag,
         db_names: &DbNamesCombination,
-        db_addr: &SocketAddr,
+        db_addr: SocketAddr,
     ) -> anyhow::Result<()> {
         let url = format!(
             "http://{}/{}/{}/{}/{}?{}",
@@ -215,11 +262,11 @@ impl EventProcessor for Processor {
         let mut join_set = tokio::task::JoinSet::new();
         let tag = event.clone();
         let db_addr = self.db_addr;
-        join_set.spawn(async move { Self::add_to_user_profiles(tag, &db_addr).await });
+        join_set.spawn(async move { Self::add_to_user_profiles(tag, db_addr).await });
         let combinations = UserTagPropertyCombinations::new(&event);
         for db_names in combinations {
             let tag = event.clone();
-            join_set.spawn(async move { Self::add_to_aggregates(tag, &db_names, &db_addr).await });
+            join_set.spawn(async move { Self::add_to_aggregates(tag, &db_names, db_addr).await });
         }
         loop {
             match join_set.join_next().await {
@@ -247,6 +294,9 @@ struct Args {
 async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
     let args: Args =
         envy::from_env().context("failed to parse config from environment variables")?;
+
+    create_sindices(args.aerospike_rest).await?;
+
     let stream = EventStream::new(&args.kafka_brokers, args.kafka_group, args.kafka_topic)?;
     let processor = Processor {
         db_addr: args.aerospike_rest,

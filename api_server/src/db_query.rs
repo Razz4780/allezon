@@ -14,6 +14,7 @@ use std::net::SocketAddr;
 pub const AS_KVS_BASE: &str = "v1/kvs";
 pub const AS_QUERY_BASE: &str = "v1/query";
 pub const AS_OPERATE_BASE: &str = "v2/operate";
+pub const AS_INDEX_BASE: &str = "v1/index";
 pub const AS_NAMESPACE: &str = "test";
 pub const AS_VIEW_PROFILES_SET: &str = "view-profiles";
 pub const AS_BUY_PROFILES_SET: &str = "buy-profiles";
@@ -45,7 +46,7 @@ async fn get_user_tags(
     cookie: &String,
     query: &UserProfilesQuery,
     action: Action,
-    db_addr: &SocketAddr,
+    db_addr: SocketAddr,
 ) -> anyhow::Result<Vec<UserTag>> {
     let set = match action {
         Action::Buy => AS_BUY_PROFILES_SET,
@@ -90,7 +91,7 @@ async fn get_user_tags(
 pub async fn get_user_profile(
     cookie: String,
     query: &UserProfilesQuery,
-    db_addr: &SocketAddr,
+    db_addr: SocketAddr,
 ) -> anyhow::Result<UserProfilesReply> {
     let client = Client::new();
 
@@ -175,7 +176,7 @@ struct AggregateDbResponse {
 
 pub async fn get_aggregate(
     query: AggregatesQuery,
-    db_addr: &SocketAddr,
+    db_addr: SocketAddr,
 ) -> anyhow::Result<AggregatesReply> {
     let has_count = query.aggregates().contains(&Aggregate::Count);
     let has_sum_price = query.aggregates().contains(&Aggregate::SumPrice);

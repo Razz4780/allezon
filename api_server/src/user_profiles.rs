@@ -14,7 +14,7 @@ impl UserProfilesQuery {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct UserProfilesReply {
     pub cookie: String,
     pub views: Vec<UserTag>,

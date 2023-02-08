@@ -21,7 +21,7 @@ impl Display for Aggregate {
     }
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct AggregatesQuery {
     pub time_range: BucketsRange,
     pub action: Action,
@@ -128,13 +128,13 @@ impl AggregatesQuery {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct AggregatesRow {
     pub sum_price: Option<usize>,
     pub count: Option<usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct AggregatesReply {
     query: AggregatesQuery,
     rows: Vec<AggregatesRow>,

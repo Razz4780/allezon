@@ -119,3 +119,31 @@ impl OperateDbRequest {
         }
     }
 }
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum IndexType {
+    Numeric,
+    String,
+    Geo2DSphere,
+}
+
+pub struct CreateIndexRequest {
+    pub type_: IndexType,
+    pub name: String,
+    pub namespace: String,
+    pub set: String,
+    pub bin: String,
+}
+
+impl Serialize for CreateIndexRequest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(5))?;
+        map.serialize_entry("type", &self.type_)?;
+        map.serialize_entry("name", &self.name)?;
+        map.serialize_entry("namespace", &self.namespace)?;
+        map.serialize_entry("set", &self.set)?;
+        map.serialize_entry("bin", &self.bin)?;
+        map.end()
+    }
+}
