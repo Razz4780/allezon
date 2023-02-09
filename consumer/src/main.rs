@@ -1,31 +1,26 @@
-use anyhow::Context;
-use api_server::{
-    db_query::{
-        time_to_int_aggregate, time_to_int_user_profile, AggregateRecord, UserProfileRecord,
-        AS_BUY_PROFILES_SET, AS_INDEX_BASE, AS_KVS_BASE, AS_NAMESPACE, AS_OPERATE_BASE,
-        AS_QUERY_PARAMS, AS_VIEW_PROFILES_SET,
-    },
-    user_tag::{Action, UserTag},
+use aerospike::operations::lists::{ListOrderType, ListPolicy};
+use aerospike::{
+    as_bin, as_key, as_list, as_val, operations, Client, ClientPolicy, Error, ErrorKind,
+    Expiration, GenerationPolicy, RecordExistsAction, ResultCode, WritePolicy,
 };
+use anyhow::{bail, Context};
+use api_server::db_query::{time_to_int_aggregate, time_to_int_user_profile};
+use api_server::user_tag::{Action, UserTag};
 use async_trait::async_trait;
 use event_queue::consumer::{EventProcessor, EventStream};
-use reqwest::{Client, StatusCode};
 use serde::Deserialize;
-use std::{net::SocketAddr, process::ExitCode};
-use tokio::{
-    signal,
-    sync::oneshot::{self, Receiver},
-};
-
-pub mod db_ops;
-
-use crate::db_ops::*;
+use std::net::SocketAddr;
+use std::process::ExitCode;
+use std::sync::Arc;
+use tokio::sync::oneshot::Receiver;
+use tokio::{signal, sync::oneshot};
 
 struct DbNamesCombination {
     set: String,
     user_key: String,
 }
 
+#[derive(Clone)]
 struct UserTagPropertyCombinations {
     x: u8,
     action: Action,
@@ -98,157 +93,87 @@ impl std::iter::Iterator for UserTagPropertyCombinations {
     }
 }
 
-async fn create_sindices(db_addr: SocketAddr) -> anyhow::Result<()> {
-    let view_combinations = UserTagPropertyCombinations {
-        x: 0,
-        action: Action::View,
-        origin: "".into(),
-        brand_id: "".into(),
-        category_id: "".into(),
-        time: 0,
-    };
-    let buy_combinations = UserTagPropertyCombinations {
-        x: 0,
-        action: Action::Buy,
-        origin: "".into(),
-        brand_id: "".into(),
-        category_id: "".into(),
-        time: 0,
-    };
-
-    for db_names in view_combinations
-        .into_iter()
-        .chain(buy_combinations.into_iter())
-    {
-        let idx_name = format!("{}_idx", db_names.set);
-        let request = CreateIndexRequest {
-            type_: IndexType::Numeric,
-            name: idx_name.clone(),
-            namespace: AS_NAMESPACE.into(),
-            set: db_names.set,
-            bin: "time".into(),
-        };
-        let url = format!("http://{}/{}?{}", db_addr, AS_INDEX_BASE, AS_QUERY_PARAMS);
-        let client = Client::new();
-
-        let res = client.post(url).json(&request).send().await?;
-        match res.status() {
-            StatusCode::ACCEPTED | StatusCode::CONFLICT => {}
-            _ => anyhow::bail!(
-                "Could not create sindex {}: {} {:?}",
-                idx_name,
-                res.status(),
-                res.text().await?
-            ),
-        }
-    }
-    Ok(())
+#[derive(Deserialize)]
+struct Args {
+    kafka_brokers: Vec<SocketAddr>,
+    kafka_group: String,
+    kafka_topic: String,
+    aerospike: SocketAddr,
 }
 
+#[derive(Clone)]
 struct Processor {
-    db_addr: SocketAddr,
+    client: Arc<Client>,
+    create_policy: Arc<WritePolicy>,
+    update_policy: Arc<WritePolicy>,
 }
 
 impl Processor {
-    async fn add_to_user_profiles(tag: UserTag, db_addr: SocketAddr) -> anyhow::Result<()> {
-        let cookie = tag.cookie.clone();
-        let set = match tag.action {
-            Action::Buy => AS_BUY_PROFILES_SET,
-            Action::View => AS_VIEW_PROFILES_SET,
-        };
-        let url = format!(
-            "http://{}/{}/{}/{}/{}?{}",
-            db_addr, AS_KVS_BASE, AS_NAMESPACE, set, cookie, AS_QUERY_PARAMS
-        );
-        let client = Client::new();
+    async fn add_to_user_profiles(&self, tag: UserTag) -> anyhow::Result<()> {
         let time = time_to_int_user_profile(&tag.time);
-        let user_tags = vec![(time, tag.clone())];
-        let record = UserProfileRecord { user_tags };
-        let res = client.post(url).json(&record).send().await?;
-
-        let url = format!(
-            "http://{}/{}/{}/{}/{}?{}",
-            db_addr, AS_OPERATE_BASE, AS_NAMESPACE, set, cookie, AS_QUERY_PARAMS
-        );
-        let res = match res.status() {
-            StatusCode::CREATED => {
-                let request = OperateDbRequest::list_set_order();
-                client.post(url).json(&request).send().await?
-            }
-            StatusCode::CONFLICT => {
-                let request = OperateDbRequest::update_user_profile(tag);
-                client.post(url).json(&request).send().await?
-            }
-            _ => anyhow::bail!(
-                "Could not add record {}: {:?}: {} {:?}",
-                cookie,
-                &record,
-                res.status(),
-                res.text().await?
-            ),
+        let tag_str = serde_json::to_string(&tag)?;
+        let pair = as_list!(time, tag_str);
+        let list = as_list!(pair.clone());
+        let bin = as_bin!("user_tags", list);
+        let key = match tag.action {
+            Action::View => as_key!("test", "view-profiles", tag.cookie.clone()),
+            Action::Buy => as_key!("test", "buy-profiles", tag.cookie.clone()),
         };
-        if res.status() == StatusCode::OK {
-            Ok(())
-        } else {
-            anyhow::bail!(
-                "could not update record {}: {}, {:?}",
-                cookie,
-                res.status(),
-                res.text().await?
-            );
+        match self.client.put(&self.create_policy, &key, &[bin]).await {
+            Ok(_) => Ok(()),
+            Err(Error(ErrorKind::ServerError(ResultCode::KeyExistsError), _))
+            | Err(Error(ErrorKind::ServerError(ResultCode::GenerationError), _)) => {
+                let set_order =
+                    operations::lists::set_order("user_tags", ListOrderType::Ordered, &[]);
+                let list_policy = ListPolicy {
+                    attributes: ListOrderType::Ordered,
+                    flags: operations::lists::ListWriteFlags::Default,
+                };
+                let append = operations::lists::append(&list_policy, "user_tags", &pair);
+                let trim = operations::lists::trim("user_tags", 0, 200);
+                let ops = vec![set_order, append, trim];
+
+                match self.client.operate(&self.update_policy, &key, &ops).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => bail!("Could not update {}: {}", tag.cookie, e),
+                }
+            }
+            Err(e) => bail!("Could not add user tag {:?} to db: {}", tag, e),
         }
     }
 
     async fn add_to_aggregates(
-        tag: UserTag,
+        &self,
+        price: i64,
         db_names: &DbNamesCombination,
-        db_addr: SocketAddr,
     ) -> anyhow::Result<()> {
-        let url = format!(
-            "http://{}/{}/{}/{}/{}?{}",
-            db_addr, AS_KVS_BASE, AS_NAMESPACE, db_names.set, db_names.user_key, AS_QUERY_PARAMS
-        );
-        let client = Client::new();
-        let record = AggregateRecord {
-            time: time_to_int_aggregate(&tag.time),
-            count: 1,
-            sum_price: tag.product_info.price as usize,
-        };
+        let key = as_key!("test", db_names.set.as_str(), db_names.user_key.as_str());
+        let count = as_bin!("count", 1);
+        let sum_price = as_bin!("sum_price", price);
+        let bins = [count.clone(), sum_price.clone()];
 
-        let res = client.post(url).json(&record).send().await?;
-        match res.status() {
-            StatusCode::CREATED => Ok(()),
-            StatusCode::CONFLICT => {
-                // 409: Record already exists
-                let url = format!(
-                    "http://{}/{}/{}/{}/{}?{}",
-                    db_addr,
-                    AS_OPERATE_BASE,
-                    AS_NAMESPACE,
-                    db_names.set,
-                    db_names.user_key,
-                    AS_QUERY_PARAMS
-                );
-                let request = OperateDbRequest::update_aggregate_record(&tag);
-                let res = client.post(url).json(&request).send().await?;
-
-                if res.status() == StatusCode::OK {
-                    Ok(())
-                } else {
-                    anyhow::bail!(
-                        "could not update record {}: {}, {:?}",
+        match self.client.put(&self.create_policy, &key, &bins).await {
+            Ok(_) => Ok(()),
+            Err(Error(ErrorKind::ServerError(ResultCode::KeyExistsError), _))
+            | Err(Error(ErrorKind::ServerError(ResultCode::GenerationError), _)) => {
+                let add_count = operations::add(&count);
+                let add_price = operations::add(&sum_price);
+                let ops = [add_count, add_price];
+                match self.client.operate(&self.update_policy, &key, &ops).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => bail!(
+                        "Could not update {}/{}: {}",
+                        db_names.set,
                         db_names.user_key,
-                        res.status(),
-                        res.text().await?,
-                    );
+                        e
+                    ),
                 }
             }
-            _ => anyhow::bail!(
-                "Could not add record {}: {:?}: {}, {:?}",
+            Err(e) => bail!(
+                "Could not add to aggregates {}/{}: {}",
+                db_names.set,
                 db_names.user_key,
-                &record,
-                res.status(),
-                res.text().await?
+                e
             ),
         }
     }
@@ -260,22 +185,23 @@ impl EventProcessor for Processor {
 
     async fn process(&self, event: UserTag) -> anyhow::Result<()> {
         let mut join_set = tokio::task::JoinSet::new();
+        let self_copy = self.clone();
         let tag = event.clone();
-        let db_addr = self.db_addr;
-        join_set.spawn(async move { Self::add_to_user_profiles(tag, db_addr).await });
+        join_set.spawn(async move { self_copy.add_to_user_profiles(tag).await });
         let combinations = UserTagPropertyCombinations::new(&event);
+        let price: i64 = event.product_info.price.into();
         for db_names in combinations {
-            let tag = event.clone();
-            join_set.spawn(async move { Self::add_to_aggregates(tag, &db_names, db_addr).await });
+            let self_copy = self.clone();
+            join_set.spawn(async move { self_copy.add_to_aggregates(price, &db_names).await });
         }
         loop {
             match join_set.join_next().await {
                 Some(Ok(Ok(_))) => {}
                 Some(Ok(Err(e))) => {
-                    anyhow::bail!("could not add user tag to database: {}", e);
+                    bail!("could not add user tag to database: {}", e);
                 }
                 Some(Err(e)) => {
-                    anyhow::bail!("error while joining task: {}", e);
+                    bail!("error while joining task: {}", e);
                 }
                 None => return Ok(()),
             }
@@ -283,24 +209,28 @@ impl EventProcessor for Processor {
     }
 }
 
-#[derive(Deserialize)]
-struct Args {
-    kafka_brokers: Vec<SocketAddr>,
-    kafka_group: String,
-    kafka_topic: String,
-    aerospike_rest: SocketAddr,
-}
-
 async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
     let args: Args =
         envy::from_env().context("failed to parse config from environment variables")?;
 
-    create_sindices(args.aerospike_rest).await?;
+    let mut create_policy = WritePolicy::new(0, Expiration::Never);
+    let mut update_policy = create_policy.clone();
+    create_policy.generation_policy = GenerationPolicy::ExpectGenEqual;
+    create_policy.record_exists_action = RecordExistsAction::CreateOnly;
+    update_policy.generation_policy = GenerationPolicy::None;
+    update_policy.record_exists_action = RecordExistsAction::UpdateOnly;
+    let client_policy = ClientPolicy::default();
 
-    let stream = EventStream::new(&args.kafka_brokers, args.kafka_group, args.kafka_topic)?;
-    let processor = Processor {
-        db_addr: args.aerospike_rest,
+    let client = match Client::new(&client_policy, &args.aerospike.to_string()).await {
+        Ok(client) => client,
+        Err(e) => bail!("Could not create client: {}", e),
     };
+    let processor = Processor {
+        client: client.into(),
+        create_policy: create_policy.into(),
+        update_policy: update_policy.into(),
+    };
+    let stream = EventStream::new(&args.kafka_brokers, args.kafka_group, args.kafka_topic)?;
 
     tokio::select! {
         res = stream.consume(&processor) => res,

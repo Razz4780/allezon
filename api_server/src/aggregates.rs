@@ -1,4 +1,5 @@
 use crate::{
+    db_query::time_to_int_aggregate,
     time_range::{BucketsRange, FORMAT_STR_SECONDS},
     user_tag::Action,
 };
@@ -126,6 +127,26 @@ impl AggregatesQuery {
         }
         ret
     }
+
+    pub fn db_user_keys(&self) -> impl '_ + Iterator<Item = String> {
+        let mut ret: String = match self.action {
+            Action::Buy => "buy",
+            Action::View => "view",
+        }
+        .into();
+        if let Some(origin) = &self.origin {
+            ret = format!("{}---{}", ret, origin);
+        }
+        if let Some(brand_id) = &self.brand_id {
+            ret = format!("{}---{}", ret, brand_id);
+        }
+        if let Some(category_id) = &self.category_id {
+            ret = format!("{}---{}", ret, category_id);
+        }
+        self.time_range
+            .bucket_starts()
+            .map(move |t| format!("{}---{}", ret, time_to_int_aggregate(&t)))
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -159,7 +180,12 @@ impl Serialize for AggregatesReply {
                 columns.push("category_id".into());
             }
             for aggr in &self.query.aggregates {
-                columns.push(aggr.to_string());
+                let aggr_str = match aggr {
+                    Aggregate::Count => "count",
+                    Aggregate::SumPrice => "sum_price",
+                }
+                .into();
+                columns.push(aggr_str);
             }
 
             columns
