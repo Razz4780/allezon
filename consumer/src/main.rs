@@ -6,23 +6,12 @@ use std::process::ExitCode;
 use tokio::sync::oneshot::Receiver;
 use tokio::{signal, sync::oneshot};
 
-#[cfg(not(feature = "aggregates"))]
 #[derive(Deserialize)]
 struct Args {
     kafka_brokers: Vec<SocketAddr>,
     kafka_group: String,
     kafka_topic: String,
     aerospike: SocketAddr,
-}
-
-#[cfg(feature = "aggregates")]
-#[derive(Deserialize)]
-struct Args {
-    kafka_brokers: Vec<SocketAddr>,
-    kafka_group: String,
-    kafka_topic: String,
-    aerospike: SocketAddr,
-    aggregates_group: u8,
 }
 
 #[cfg(not(feature = "aggregates"))]
@@ -45,15 +34,15 @@ async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
 
     let args: Args =
         envy::from_env().context("failed to parse config from environment variables")?;
-    anyhow::ensure!(
-        args.aggregates_group & !0x3 == 0,
-        "invalid aggregates_group"
-    );
-    let first = AggregatesCombination {
-        x: args.aggregates_group,
-    };
-    let second = AggregatesCombination {
-        x: (!args.aggregates_group) & 0x7,
+    let (first, second) = match args.kafka_group.rsplit_once("_") {
+        Some((_, x)) => {
+            let x = u8::from_str_radix(x, 10).context("invalid aggregates group")?;
+            (
+                AggregatesCombination { x },
+                AggregatesCombination { x: (!x) & 0x7 },
+            )
+        }
+        _ => anyhow::bail!("invalid aggregates group"),
     };
     let processor =
         consumer::aggregates::AggregatesProcessor::new(args.aerospike, first, second).await?;
