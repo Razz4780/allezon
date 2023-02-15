@@ -17,3 +17,7 @@ serde = { version = "1.0.152", features = ["derive"] }
 async-trait = "0.1.63"
 serde_json = "1.0.91"
 aerospike = { git = "https://github.com/asynos/aerospike-client-rust.git", branch = "async", features = ["rt-tokio"] }
+
+[features]
+default = []
+aggregates = []

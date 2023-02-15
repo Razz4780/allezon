@@ -10,9 +10,10 @@ use tokio::{
 #[derive(Deserialize, Debug)]
 struct Args {
     address: SocketAddr,
-    aerospike: SocketAddr,
     kafka_brokers: Vec<SocketAddr>,
     kafka_topic: String,
+    aerospike_user_profiles: SocketAddr,
+    aerospike_aggregates: Vec<SocketAddr>,
 }
 
 #[cfg(feature = "only_echo")]
@@ -30,7 +31,7 @@ async fn run_server(stop: Receiver<()>) -> anyhow::Result<()> {
         envy::from_env().context("failed to read configuration from environment variables")?;
 
     let producer = EventProducer::new(&args.kafka_brokers, args.kafka_topic)?;
-    let db_client = DbClient::new(args.aerospike).await?;
+    let db_client = DbClient::new(args.aerospike_user_profiles, args.aerospike_aggregates).await?;
     let app = App::new(producer);
 
     ApiServer::new(app.into(), db_client.into())
