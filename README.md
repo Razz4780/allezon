@@ -1,5 +1,8 @@
 # allezon
 
+# Installation
+Run `sudo install.sh [ansible_user] [ansible_password]` on one of the VMs.
+
 ## ApiServer
 Accepts HTTP requests. Pushes user tags to Kafka and queries Aerospike for data.
 
@@ -18,4 +21,3 @@ Configuration is passed through environment variables:
 2. `kafka_group` - a Kafka group of this consumer. When built with `aggregates` feature, group should end with `_{0|1|2|3}`
 3. `kafka_topic` - a topic for user tags in Kafka
 4. `aerospike` - address of local aerospike server
-

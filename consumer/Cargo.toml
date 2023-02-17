@@ -20,4 +20,4 @@ aerospike = { git = "https://github.com/asynos/aerospike-client-rust.git", branc
 
 [features]
 default = []
-aggregates = []
+user_profiles = []

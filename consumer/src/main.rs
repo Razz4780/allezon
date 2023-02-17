@@ -14,7 +14,7 @@ struct Args {
     aerospike: SocketAddr,
 }
 
-#[cfg(not(feature = "aggregates"))]
+#[cfg(feature = "user_profiles")]
 async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
     let args: Args =
         envy::from_env().context("failed to parse config from environment variables")?;
@@ -28,7 +28,7 @@ async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
     }
 }
 
-#[cfg(feature = "aggregates")]
+#[cfg(not(feature = "user_profiles"))]
 async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
     use api_server::db_query::AggregatesCombination;
 

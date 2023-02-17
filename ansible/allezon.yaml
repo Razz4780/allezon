@@ -1,0 +1,135 @@
+- name: Install aerospike and kafka
+  any_errors_fatal: true
+  hosts: all
+
+  tasks:
+  - name: Install aerospike
+    include_tasks:
+      file: aerospike/aerospike.yaml
+
+  - name: Install kafka
+    include_tasks:
+      file: kafka/kafka.yaml
+
+- name: Create user_tags kafka topic
+  any_errors_fatal: true
+  hosts: load_balancer
+
+  tasks:
+  - name: Check if user_tags topic exists
+    register: kafka_topics
+    command:
+      cmd: "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
+
+  - name: Create user_tags topic
+    command:
+      cmd: "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic user_tags --partitions 10"
+    when: "'user_tags' not in kafka_topics.stdout_lines"
+
+- name: Install allezon
+  any_errors_fatal: true
+  hosts: all
+
+  tasks:
+  - name: Ensure group "allezon" exists
+    become: true
+    group:
+      name: allezon
+      state: present
+
+  - name: Ensure user "allezon" exists
+    become: true
+    user:
+      name: allezon
+      home: /opt/allezon
+      state: present
+      group: allezon
+
+  - name: Create allezon home directory
+    become: true
+    file:
+      path: /opt/allezon
+      state: directory
+      mode: 0755
+      owner: allezon
+      group: allezon
+
+  - name: Copy api_server executable
+    become: true
+    copy:
+      src: api_server/api_server
+      dest: /opt/allezon/api_server
+      owner: allezon
+      group: allezon
+      mode: 0744
+
+  - name: Copy consumer executable
+    become: true
+    copy:
+      src: "consumer/consumer_{{  features | default(\"aggregates\") }}"
+      dest: /opt/allezon/consumer
+      owner: allezon
+      group: allezon
+      mode: 0744
+
+  - name: Copy allezon config files
+    become: true
+    register: service_conf
+    template:
+      src: "{{ item }}/{{ item }}_start.sh.j2"
+      dest: "/opt/allezon/{{ item }}_start.sh"
+      owner: allezon
+      group: allezon
+      mode: 0744
+    loop:
+    - api_server
+    - consumer
+
+  - name: Copy allezon service files
+    become: true
+    copy:
+      src: "{{ item }}/{{ item }}.service"
+      dest: "/etc/systemd/system/{{ item }}.service"
+      owner: root
+      group: root
+      mode: 0644
+    loop:
+    - api_server
+    - consumer
+
+  - name: Ensure allezon daemons are enabled
+    become: true
+    become_user: root
+    systemd:
+      name: "{{ item }}"
+      state: started
+      enabled: yes
+    loop:
+    - api_server
+    - consumer
+
+  - name: Restart api server daemon on config change
+    become: true
+    become_user: root
+    systemd:
+      name: api_server
+      state: restarted
+    when: service_conf.results[0].changed
+
+  - name: Restart consumer daemon on config change
+    become: true
+    become_user: root
+    systemd:
+      name: consumer 
+      state: restarted
+    when: service_conf.results[1].changed
+
+- name: Install load balancer
+  any_errors_fatal: true
+  hosts: load_balancer
+
+  tasks:
+  - name: Install nginx
+    become: true
+    apt:
+      name: nginx

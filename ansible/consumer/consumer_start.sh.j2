@@ -1,0 +1,7 @@
+#!/bin/bash
+
+kafka_brokers={{ ansible_facts.eth0.ipv4.address }}:9092 \
+kafka_group={{ kafka_group }} \
+kafka_topic=user_tags \
+aerospike={{ ansible_facts.eth0.ipv4.address }}:3000 \
+/opt/allezon/consumer &> /opt/allezon/consumer.log

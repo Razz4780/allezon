@@ -1,0 +1,13 @@
+[Unit]
+Requires=kafka.service aerospike.service
+After=kafka.service aerospike.service
+
+[Service]
+Type=simple
+User=allezon
+ExecStart=/bin/sh -c '/opt/allezon/consumer_start.sh'
+ExecStop=/bin/sh -c 'killall consumer'
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target
