@@ -38,10 +38,7 @@ impl ApiServer {
     ) -> Response {
         match app.get_user_profile(cookie, query).await {
             Ok(reply) => {
-                let expected: UserProfilesReply = serde_json::from_reader(&expected.to_vec()[..]).unwrap();
-                if reply != expected {
-                    log::warn!("Mismatch: got {:?}, expected {:?}", reply, expected);
-                }
+                log::warn!("HMMMM: got {}, expected {:?}", serde_json::to_string(&reply).unwrap(), std::str::from_utf8(&expected.to_vec()));
 
                 let response = warp::reply::json(&reply);
                 let response = warp::reply::with_status(response, StatusCode::OK);
