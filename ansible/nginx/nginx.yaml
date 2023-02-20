@@ -1,0 +1,41 @@
+- name: Populate service facts
+  service_facts:
+
+- name: Install nginx
+  become: true
+  apt:
+    name: nginx
+  when: ansible_facts.services['nginx.service'] is not defined
+
+- name: Copy config file with owner and permissions
+  become: true
+  register: service_conf
+  template:
+    src: api_proxy.conf.j2
+    dest: /etc/nginx/sites-available/api_proxy.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create symbolic link
+  register: symlink
+  become: true
+  file:
+    src: /etc/nginx/sites-available/api_proxy.conf
+    dest: /etc/nginx/sites-enabled/api_proxy.conf
+    state: link
+
+- name: Ensure the nginx daemon is enabled
+  become: true
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Restart daemon on config change
+  become: true
+  systemd:
+    name: nginx
+    state: restarted
+  when: service_conf.changed or symlink.changed

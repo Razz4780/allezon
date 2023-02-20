@@ -20,7 +20,7 @@ impl<C: DbClient> App<C> {
     }
 
     pub async fn create_user_tag(&self, tag: &UserTag) -> anyhow::Result<()> {
-        self.producer.produce(&tag.cookie, tag).await
+        self.producer.produce(tag).await
     }
 
     pub async fn get_user_profile(

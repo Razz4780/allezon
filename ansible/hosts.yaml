@@ -19,3 +19,6 @@ allezon:
         "XXXvm1[01:06].rtb-lab.pl"
       vars:
         kafka_group_base: "consumer_"
+nginx:
+  hosts:
+    "XXXvm110.rtb-lab.pl"

@@ -105,3 +105,11 @@
       name: consumer 
       state: restarted
     when: service_conf.changed
+
+- name: Setup nginx
+  any_errors_fatal: true
+  hosts: nginx
+  tasks:
+  - name: Install
+    include_tasks:
+      file: nginx/nginx.yaml

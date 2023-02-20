@@ -1,0 +1,16 @@
+upstream apicluster {
+    {% for srv in groups.api_server %}
+    server {{ srv }}:8082;
+    {% endfor  %}
+}
+
+server {
+    listen 6666 default_server;
+    listen [::]:6666 default_server;
+    server_name _;
+
+    location / {
+
+        proxypass http://apicluster/
+    }
+}

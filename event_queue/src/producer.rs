@@ -29,13 +29,13 @@ impl EventProducer {
         Ok(Self { producer, topic })
     }
 
-    pub async fn produce<E: Serialize>(&self, key: &str, event: &E) -> anyhow::Result<()> {
+    pub async fn produce<E: Serialize>(&self, event: &E) -> anyhow::Result<()> {
         let serialized = serde_json::to_vec(event).expect("serialization to memory buffer failed");
-        let record: FutureRecord<_, _> = FutureRecord {
+        let record: FutureRecord<[u8], _> = FutureRecord {
             topic: &self.topic,
             partition: None,
             payload: Some(&serialized),
-            key: Some(key),
+            key: None,
             timestamp: None,
             headers: None,
         };
