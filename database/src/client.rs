@@ -114,7 +114,13 @@ impl DbClient for SimpleDbClient {
             Err(e) => bail!("failed to fetch profile {:?}", e),
         };
 
+        views.retain(|tag| {
+            &tag.time >= query.time_range.from() && &tag.time < query.time_range.to()
+        });
         views.truncate(query.limit as usize);
+        buys.retain(|tag| {
+            &tag.time >= query.time_range.from() && &tag.time < query.time_range.to()
+        });
         buys.truncate(query.limit as usize);
 
         Ok(UserProfilesReply {
