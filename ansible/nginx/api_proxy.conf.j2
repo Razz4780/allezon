@@ -10,7 +10,6 @@ server {
     server_name _;
 
     location / {
-
-        proxypass http://apicluster/
+        proxy_pass http://apicluster;
     }
 }
