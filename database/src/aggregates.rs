@@ -196,23 +196,23 @@ impl Serialize for AggregatesReply {
     }
 }
 
-#[derive(Clone)]
-pub struct AggregatesBucket<'a> {
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct AggregatesBucket {
     pub time: DateTime<Utc>,
-    pub origin: Option<&'a str>,
-    pub brand_id: Option<&'a str>,
-    pub category_id: Option<&'a str>,
+    pub origin: Option<String>,
+    pub brand_id: Option<String>,
+    pub category_id: Option<String>,
 }
 
-impl<'a> Display for AggregatesBucket<'a> {
+impl Display for AggregatesBucket {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}--{}--{}--{}",
             self.time.timestamp() / 60,
-            self.origin.unwrap_or(""),
-            self.brand_id.unwrap_or(""),
-            self.category_id.unwrap_or(""),
+            self.origin.as_deref().unwrap_or(""),
+            self.brand_id.as_deref().unwrap_or(""),
+            self.category_id.as_deref().unwrap_or(""),
         )
     }
 }
@@ -250,7 +250,6 @@ mod test {
 
         // Invalid row count.
         query
-            .clone()
             .make_reply(vec![AggregatesRow {
                 sum_price: 1,
                 count: 1,

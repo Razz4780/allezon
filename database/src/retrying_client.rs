@@ -51,10 +51,10 @@ impl DbClient for RetryingClient {
         self.client.get_aggregates(query).await
     }
 
-    async fn update_aggregate<'a>(
+    async fn update_aggregate(
         &self,
         action: Action,
-        bucket: AggregatesBucket<'a>,
+        bucket: AggregatesBucket,
         count: usize,
         sum_price: usize,
     ) -> anyhow::Result<()> {

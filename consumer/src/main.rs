@@ -34,24 +34,22 @@ async fn run_consumers(mut stop: Receiver<bool>) -> anyhow::Result<()> {
 
     let mut tasks = Vec::with_capacity(filters.len() + 1);
 
-    let processor = UserProfilesProcessor::new(db_client.clone());
-    let mut stream = EventStream::new(
+    let processor = UserProfilesProcessor::new(db_client.clone(), stop.clone());
+    let stream = EventStream::new(
         &args.kafka_brokers,
         format!("{}-profiles", args.kafka_group_base),
         &args.kafka_topic,
-        stop.clone(),
     )?;
-    tasks.push(task::spawn(async move { stream.consume(&processor).await }));
+    tasks.push(task::spawn(processor.run(stream)));
 
     for filter in filters {
-        let processor = AggregatesProcessor::new(filter, db_client.clone());
-        let mut stream = EventStream::new(
+        let processor = AggregatesProcessor::new(filter, db_client.clone(), stop.clone());
+        let stream = EventStream::new(
             &args.kafka_brokers,
             format!("{}-aggregates-{}", args.kafka_group_base, filter),
             &args.kafka_topic,
-            stop.clone(),
         )?;
-        tasks.push(task::spawn(async move { stream.consume(&processor).await }));
+        tasks.push(task::spawn(processor.run(stream)));
     }
 
     while !*stop.borrow() {

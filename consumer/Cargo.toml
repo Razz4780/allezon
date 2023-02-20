@@ -9,7 +9,7 @@ edition = "2021"
 envy = "0.4.2"
 event_queue = { path = "../event_queue" }
 api_server = { path = "../api_server" }
-tokio = { version = "1.24.2", features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { version = "1.24.2", features = ["rt-multi-thread", "macros", "signal", "time"] }
 anyhow = "1.0.68"
 log = "0.4.17"
 env_logger = "0.10.0"
@@ -18,4 +18,4 @@ async-trait = "0.1.63"
 serde_json = "1.0.91"
 aerospike = { git = "https://github.com/asynos/aerospike-client-rust.git", branch = "async", features = ["rt-tokio"] }
 database = { path = "../database" }
-futures = "0.3.26"
+futures-util = "0.3.26"

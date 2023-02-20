@@ -24,10 +24,10 @@ pub trait DbClient {
 
     async fn get_aggregates(&self, query: AggregatesQuery) -> anyhow::Result<AggregatesReply>;
 
-    async fn update_aggregate<'a>(
+    async fn update_aggregate(
         &self,
         action: Action,
-        bucket: AggregatesBucket<'a>,
+        bucket: AggregatesBucket,
         count: usize,
         sum_price: usize,
     ) -> anyhow::Result<()>;
@@ -168,9 +168,9 @@ impl DbClient for SimpleDbClient {
             .bucket_starts()
             .map(|time| AggregatesBucket {
                 time,
-                origin: query.origin.as_deref(),
-                brand_id: query.origin.as_deref(),
-                category_id: query.category_id.as_deref(),
+                origin: query.origin.clone(),
+                brand_id: query.origin.clone(),
+                category_id: query.category_id.clone(),
             })
             .map(|user_key| {
                 let key = as_key!(
@@ -206,10 +206,10 @@ impl DbClient for SimpleDbClient {
         query.make_reply(rows)
     }
 
-    async fn update_aggregate<'a>(
+    async fn update_aggregate(
         &self,
         action: Action,
-        bucket: AggregatesBucket<'a>,
+        bucket: AggregatesBucket,
         count: usize,
         sum_price: usize,
     ) -> anyhow::Result<()> {
