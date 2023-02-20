@@ -1,7 +1,7 @@
 use crate::app::App;
 use anyhow::Context;
 use database::{
-    aggregates::AggregatesQuery, client::DbClient, user_profiles::UserProfilesQuery,
+    aggregates::AggregatesQuery, client::DbClient, user_profiles::{UserProfilesQuery, UserProfilesReply},
     user_tag::UserTag,
 };
 use std::{net::SocketAddr, sync::Arc};
@@ -34,9 +34,15 @@ impl ApiServer {
         app: Arc<App<C>>,
         cookie: String,
         query: UserProfilesQuery,
+        expected: warp::hyper::body::Bytes,
     ) -> Response {
         match app.get_user_profile(cookie, query).await {
             Ok(reply) => {
+                let expected: UserProfilesReply = serde_json::from_reader(&expected.to_vec()[..]).unwrap();
+                if reply != expected {
+                    log::warn!("Mismatch: got {:?}, expected {:?}", reply, expected);
+                }
+
                 let response = warp::reply::json(&reply);
                 let response = warp::reply::with_status(response, StatusCode::OK);
                 let response =
@@ -91,6 +97,7 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
+            .and(warp::body::bytes())
             .then(Self::get_user_profile);
 
         let aggregates = warp::path("aggregates")
