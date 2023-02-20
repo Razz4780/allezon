@@ -1,77 +1,21 @@
-all:
+aerospike:
+  hosts:
+    "XXXvm1[01:08].rtb-lab.pl"
+  vars:
+    aerospike_sets:
+    - "view"
+    - "buy"
+    - "profiles"
+kafka:
+  hosts:
+    "XXXvm1[07:09].rtb-lab.pl"
+allezon:
   children:
-    user_profiles:
+    api_server:
       hosts:
-        "XXXvm1[01:02].rtb-lab.pl"
+        "XXXvm1[07:10].rtb-lab.pl"
+    consumer:
+      hosts:
+        "XXXvm1[01:06].rtb-lab.pl"
       vars:
-        features: "user_profiles"
-        kafka_group: "user_profiles"
-        aerospike_hosts:
-        - "XXXvm101.rtb-lab.pl"
-        - "XXXvm102.rtb-lab.pl"
-        aerospike_sets:
-        - "view_profiles"
-        - "buy_profiles"
-    aggregates_0:
-      hosts:
-        "XXXvm1[03:04].rtb-lab.pl"
-      vars:
-        kafka_group: "aggregates_0"
-        aerospike_hosts:
-        - "XXXvm103.rtb-lab.pl"
-        - "XXXvm104.rtb-lab.pl"
-        aerospike_sets:
-        - "view"
-        - "buy"
-        - "view-origin-brand_id-category_id"
-        - "buy-origin-brand_id-category_id"
-    aggregates_1:
-      hosts:
-        "XXXvm1[05:06].rtb-lab.pl"
-      vars:
-        kafka_group: "aggregates_1"
-        aerospike_hosts:
-        - "XXXvm105.rtb-lab.pl"
-        - "XXXvm106.rtb-lab.pl"
-        aerospike_sets:
-        - "view-origin"
-        - "buy-origin"
-        - "view-brand_id-category_id"
-        - "buy-brand_id-category_id"
-    aggregates_2:
-      hosts:
-        "XXXvm1[07:08].rtb-lab.pl"
-      vars:
-        kafka_group: "aggregates_2"
-        aerospike_hosts:
-        - "XXXvm107.rtb-lab.pl"
-        - "XXXvm108.rtb-lab.pl"
-        aerospike_sets:
-        - "view-brand_id"
-        - "buy-brand_id"
-        - "view-origin-category_id"
-        - "buy-origin-category_id"
-    aggregates_3:
-      hosts:
-        "XXXvm1[09:10].rtb-lab.pl"
-      vars:
-        kafka_group: "aggregates_3"
-        aerospike_hosts:
-        - "XXXvm109.rtb-lab.pl"
-        - "XXXvm110.rtb-lab.pl"
-        aerospike_sets:
-        - "view-category_id"
-        - "buy-category_id"
-        - "view-origin-brand_id"
-        - "buy-origin-brand_id"
-
-    odd:
-      hosts:
-        "XXXvm1[01:09:2].rtb-lab.pl"
-    even:
-      hosts:
-        "XXXvm1[02:10:2].rtb-lab.pl"
-
-    load_balancer:
-      hosts:
-        "XXXvm110.rtb-lab.pl"
+        kafka_group_base: "consumer_"

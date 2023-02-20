@@ -22,7 +22,7 @@ network {
 		address eth0
 		port 3002
 
-    {% for srv in aerospike_hosts %}
+    {% for srv in groups.aerospike %}
     mesh-seed-address-port {{ srv }} 3002
     {% endfor  %}
 

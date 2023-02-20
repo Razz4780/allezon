@@ -1,42 +1,22 @@
-- name: Install aerospike and kafka
+- name: Setup aerospike
   any_errors_fatal: true
-  hosts: all
+  hosts: aerospike
+  include_tasks: aerospike/aerospike.yaml
 
-  tasks:
-  - name: Install aerospike
-    include_tasks:
-      file: aerospike/aerospike.yaml
-
-  - name: Install kafka
-    include_tasks:
-      file: kafka/kafka.yaml
-
-- name: Create user_tags kafka topic
+- name: Setup kafka
   any_errors_fatal: true
-  hosts: load_balancer
+  hosts: kafka
+  inckude_tasks: kafka/kafka.yaml
 
-  tasks:
-  - name: Check if user_tags topic exists
-    register: kafka_topics
-    command:
-      cmd: "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
-
-  - name: Create user_tags topic
-    command:
-      cmd: "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic user_tags --partitions 10"
-    when: "'user_tags' not in kafka_topics.stdout_lines"
-
-- name: Install allezon
+- name: Setup allezon
   any_errors_fatal: true
-  hosts: all
-
+  hosts: allezon
   tasks:
   - name: Ensure group "allezon" exists
     become: true
     group:
       name: allezon
       state: present
-
   - name: Ensure user "allezon" exists
     become: true
     user:
@@ -44,7 +24,6 @@
       home: /opt/allezon
       state: present
       group: allezon
-
   - name: Create allezon home directory
     become: true
     file:
@@ -54,6 +33,10 @@
       owner: allezon
       group: allezon
 
+- name: Setup api_server
+  any_errors_fatal: true
+  hosts: api_server
+  tasks:
   - name: Copy api_server executable
     become: true
     copy:
@@ -62,60 +45,72 @@
       owner: allezon
       group: allezon
       mode: 0744
+  - name: Copy api_server config file
+    become: true
+    register: service_conf
+    template:
+      src: api_server/api_server_start.sh.j2
+      dest: /opt/allezon/api_server_start.sh
+      owner: allezon
+      group: allezon
+      mode: 0744
+  - name: Copy api_server service file
+    become: true
+    copy:
+      src: api_server/api_server.service
+      dest: /etc/systemd/system/api_server.service
+      owner: root
+      group: root
+      mode: 0644
+  - name: Ensure api_server daemon are enabled
+    become: true
+    systemd:
+      name: api_server
+      state: started
+      enabled: yes
+  - name: Restart api_server daemon on config change
+    become: true
+    become_user: root
+    systemd:
+      name: api_server 
+      state: restarted
+    when: service_conf.results[1].changed
 
+- name: Setup consumer
+  any_errors_fatal: true
+  hosts: consumer
+  tasks:
   - name: Copy consumer executable
     become: true
     copy:
-      src: "consumer/consumer_{{  features | default(\"aggregates\") }}"
+      src: consumer/consumer
       dest: /opt/allezon/consumer
       owner: allezon
       group: allezon
       mode: 0744
-
-  - name: Copy allezon config files
+  - name: Copy consumer config file
     become: true
     register: service_conf
     template:
-      src: "{{ item }}/{{ item }}_start.sh.j2"
-      dest: "/opt/allezon/{{ item }}_start.sh"
+      src: consumer/consumer_start.sh.j2
+      dest: /opt/allezon/consumer_start.sh
       owner: allezon
       group: allezon
       mode: 0744
-    loop:
-    - api_server
-    - consumer
-
-  - name: Copy allezon service files
+  - name: Copy consumer service file
     become: true
     copy:
-      src: "{{ item }}/{{ item }}.service"
-      dest: "/etc/systemd/system/{{ item }}.service"
+      src: consumer/consumer.service
+      dest: /etc/systemd/system/consumer.service
       owner: root
       group: root
       mode: 0644
-    loop:
-    - api_server
-    - consumer
-
-  - name: Ensure allezon daemons are enabled
+  - name: Ensure consumer daemon are enabled
     become: true
-    become_user: root
     systemd:
-      name: "{{ item }}"
+      name: consumer
       state: started
       enabled: yes
-    loop:
-    - api_server
-    - consumer
-
-  - name: Restart api server daemon on config change
-    become: true
-    become_user: root
-    systemd:
-      name: api_server
-      state: restarted
-    when: service_conf.results[0].changed
-
   - name: Restart consumer daemon on config change
     become: true
     become_user: root
@@ -123,13 +118,3 @@
       name: consumer 
       state: restarted
     when: service_conf.results[1].changed
-
-- name: Install load balancer
-  any_errors_fatal: true
-  hosts: load_balancer
-
-  tasks:
-  - name: Install nginx
-    become: true
-    apt:
-      name: nginx
