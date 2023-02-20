@@ -1,74 +1,77 @@
 use anyhow::Context;
+use consumer::aggregates::{AggregatesFilter, AggregatesProcessor};
+use consumer::user_profiles::UserProfilesProcessor;
+use database::client::DbClient;
 use event_queue::consumer::EventStream;
 use serde::Deserialize;
 use std::net::SocketAddr;
 use std::process::ExitCode;
-use tokio::sync::oneshot::Receiver;
-use tokio::{signal, sync::oneshot};
+use tokio::sync::watch::{self, Receiver};
+use tokio::{signal, task};
 
 #[derive(Deserialize)]
 struct Args {
     kafka_brokers: Vec<SocketAddr>,
-    kafka_group: String,
+    kafka_group_base: String,
     kafka_topic: String,
-    aerospike: SocketAddr,
+    aerospike_nodes: Vec<SocketAddr>,
 }
 
-#[cfg(feature = "user_profiles")]
-async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
+async fn run_consumers(mut stop: Receiver<bool>) -> anyhow::Result<()> {
     let args: Args =
         envy::from_env().context("failed to parse config from environment variables")?;
 
-    let processor = consumer::user_profiles::UserProfilesProcessor::new(args.aerospike).await?;
-    let stream = EventStream::new(&args.kafka_brokers, args.kafka_group, args.kafka_topic)?;
+    let db_client = DbClient::new(args.aerospike_nodes).await?;
+    let filters = AggregatesFilter::all();
 
-    tokio::select! {
-        res = stream.consume(&processor) => res,
-        _ = stop => Ok (()),
+    let mut tasks = Vec::with_capacity(filters.len() + 1);
+
+    let processor = UserProfilesProcessor::new(db_client.clone());
+    let mut stream = EventStream::new(
+        &args.kafka_brokers,
+        format!("{}-profiles", args.kafka_group_base),
+        &args.kafka_topic,
+        stop.clone(),
+    )?;
+    tasks.push(task::spawn(async move { stream.consume(&processor).await }));
+
+    for filter in filters {
+        let processor = AggregatesProcessor::new(filter, db_client.clone());
+        let mut stream = EventStream::new(
+            &args.kafka_brokers,
+            format!("{}-aggregates-{}", args.kafka_group_base, filter),
+            &args.kafka_topic,
+            stop.clone(),
+        )?;
+        tasks.push(task::spawn(async move { stream.consume(&processor).await }));
     }
-}
 
-#[cfg(not(feature = "user_profiles"))]
-async fn run_consumer(stop: Receiver<()>) -> anyhow::Result<()> {
-    use api_server::db_query::AggregatesCombination;
-
-    let args: Args =
-        envy::from_env().context("failed to parse config from environment variables")?;
-    let (first, second) = match args.kafka_group.rsplit_once("_") {
-        Some((_, x)) => {
-            let x = u8::from_str_radix(x, 10).context("invalid aggregates group")?;
-            (
-                AggregatesCombination { x },
-                AggregatesCombination { x: (!x) & 0x7 },
-            )
-        }
-        _ => anyhow::bail!("invalid aggregates group"),
-    };
-    let processor =
-        consumer::aggregates::AggregatesProcessor::new(args.aerospike, first, second).await?;
-    let stream = EventStream::new(&args.kafka_brokers, args.kafka_group, args.kafka_topic)?;
-
-    tokio::select! {
-        res = stream.consume(&processor) => res,
-        _ = stop => Ok (()),
+    while !*stop.borrow() {
+        stop.changed().await.ok();
     }
+
+    for task in tasks {
+        task.await.ok();
+    }
+
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
     env_logger::init();
 
-    let (tx, rx) = oneshot::channel();
+    let (tx, rx) = watch::channel(false);
     let res = tokio::try_join!(
         async move {
             signal::ctrl_c()
                 .await
                 .context("failed to listen for ctrl-c")?;
             log::info!("Received a ctrl-c signal");
-            tx.send(()).ok();
+            tx.send(true).ok();
             Ok(())
         },
-        run_consumer(rx),
+        run_consumers(rx),
     );
 
     match res {

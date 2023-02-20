@@ -8,6 +8,7 @@ use rdkafka::{
 };
 use serde::de::DeserializeOwned;
 use std::net::SocketAddr;
+use tokio::sync::watch::Receiver;
 
 #[async_trait]
 pub trait EventProcessor {
@@ -18,10 +19,16 @@ pub trait EventProcessor {
 
 pub struct EventStream {
     consumer: StreamConsumer,
+    stop: Receiver<bool>,
 }
 
 impl EventStream {
-    pub fn new(servers: &[SocketAddr], group: String, topic: String) -> anyhow::Result<Self> {
+    pub fn new(
+        servers: &[SocketAddr],
+        group: String,
+        topic: &str,
+        stop: Receiver<bool>,
+    ) -> anyhow::Result<Self> {
         let consumer: StreamConsumer = ClientConfig::new()
             .set(
                 "bootstrap.servers",
@@ -39,31 +46,38 @@ impl EventStream {
             .context("failed to build the Kafka consumer")?;
 
         consumer
-            .subscribe(&[&topic])
+            .subscribe(&[topic])
             .with_context(|| format!("failed to subscribe to the {} topic", topic))?;
 
-        Ok(Self { consumer })
+        Ok(Self { consumer, stop })
     }
 
-    pub async fn consume<P: EventProcessor>(&self, processor: &P) -> anyhow::Result<()> {
-        self.consumer
-            .stream()
-            .map_err(anyhow::Error::from)
-            .map_err(|e| e.context("failed to receive message from Kafka"))
-            .try_for_each(move |msg| async move {
-                let payload = msg.payload().unwrap_or(&[]);
-                let event: P::Event = serde_json::from_slice(payload).with_context(|| {
-                    format!("failed to deserialize message payload {:?}", payload)
-                })?;
-                processor
-                    .process(event)
-                    .await
-                    .context("event consumer failed")?;
+    pub async fn consume<P: EventProcessor>(&mut self, processor: &P) -> anyhow::Result<()> {
+        let mut stream = self.consumer.stream();
 
-                self.consumer
-                    .store_offset_from_message(&msg)
-                    .context("failed to store offset from message")
-            })
-            .await
+        loop {
+            tokio::select! {
+                msg = stream.try_next() => {
+                    let msg = msg?.context("failed to receive message from Kafka")?;
+                    let payload = msg.payload().unwrap_or(&[]);
+                    let event: P::Event = serde_json::from_slice(payload).with_context(|| {
+                        format!("failed to deserialize message payload {:?}", payload)
+                    })?;
+                    processor
+                        .process(event)
+                        .await
+                        .context("event consumer failed")?;
+
+                    self.consumer
+                        .store_offset_from_message(&msg)
+                        .context("failed to store offset from message")?;
+                }
+                r = self.stop.changed() => {
+                    if r.is_err() || *self.stop.borrow() {
+                        break Ok(());
+                    }
+                }
+            }
+        }
     }
 }

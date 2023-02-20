@@ -1,5 +1,5 @@
-use crate::{aggregates::AggregatesQuery, user_profiles::UserProfilesQuery};
 use anyhow::Context;
+use database::{aggregates::AggregatesQuery, user_profiles::UserProfilesQuery};
 use std::{net::SocketAddr, str};
 use tokio::sync::oneshot::Receiver;
 use warp::{

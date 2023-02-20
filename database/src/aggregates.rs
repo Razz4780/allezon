@@ -2,7 +2,9 @@ use crate::{
     time_range::{BucketsRange, FORMAT_STR_SECONDS},
     user_tag::Action,
 };
+use chrono::{DateTime, Utc};
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use serde_json::Value;
 use std::fmt::{self, Display, Formatter};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Debug)]
@@ -17,6 +19,15 @@ impl Display for Aggregate {
         match self {
             Self::Count => f.write_str("COUNT"),
             Self::SumPrice => f.write_str("SUM_PRICE"),
+        }
+    }
+}
+
+impl Aggregate {
+    pub fn db_name(self) -> &'static str {
+        match self {
+            Self::Count => "count",
+            Self::SumPrice => "sum_price",
         }
     }
 }
@@ -40,26 +51,27 @@ impl AggregatesQuery {
         let mut category_id = None;
         let mut aggregates = Vec::new();
 
-        for (key, value) in pairs.into_iter() {
-            let value = format!("\"{}\"", value);
+        let pairs = pairs.into_iter().map(|(k, v)| (k, Value::String(v)));
+
+        for (key, value) in pairs {
             match key.as_str() {
                 "time_range" if time_range.is_none() => {
-                    time_range = Some(serde_json::from_str(&value).ok()?);
+                    time_range.replace(serde_json::from_value(value).ok()?);
                 }
                 "action" if action.is_none() => {
-                    action = Some(serde_json::from_str(&value).ok()?);
+                    action.replace(serde_json::from_value(value).ok()?);
                 }
                 "origin" if origin.is_none() => {
-                    origin = Some(serde_json::from_str(&value).ok()?);
+                    origin.replace(serde_json::from_value(value).ok()?);
                 }
                 "brand_id" if brand_id.is_none() => {
-                    brand_id = Some(serde_json::from_str(&value).ok()?);
+                    brand_id.replace(serde_json::from_value(value).ok()?);
                 }
                 "category_id" if category_id.is_none() => {
-                    category_id = Some(serde_json::from_str(&value).ok()?);
+                    category_id.replace(serde_json::from_value(value).ok()?);
                 }
                 "aggregates" if aggregates.len() < 2 => {
-                    let aggregate = serde_json::from_str(&value).ok()?;
+                    let aggregate = serde_json::from_value(value).ok()?;
                     if aggregates.contains(&aggregate) {
                         return None;
                     }
@@ -70,17 +82,22 @@ impl AggregatesQuery {
                 }
             }
         }
-        match (time_range, action) {
-            (Some(time_range), Some(action)) if !aggregates.is_empty() => Some(Self {
-                time_range,
-                action,
-                origin,
-                brand_id,
-                category_id,
-                aggregates,
-            }),
-            _ => None,
+
+        if aggregates.is_empty() {
+            return None;
         }
+
+        let time_range = time_range?;
+        let action = action?;
+
+        Some(Self {
+            time_range,
+            action,
+            origin,
+            brand_id,
+            category_id,
+            aggregates,
+        })
     }
 
     pub fn aggregates(&self) -> &[Aggregate] {
@@ -93,30 +110,17 @@ impl AggregatesQuery {
             "invalid rows count"
         );
 
-        let expected_sum_price = self.aggregates.contains(&Aggregate::SumPrice);
-        let expected_count = self.aggregates.contains(&Aggregate::Count);
-        for row in &rows {
-            anyhow::ensure!(
-                !expected_sum_price || row.sum_price.is_some(),
-                "row does not contain sum price"
-            );
-            anyhow::ensure!(
-                !expected_count || row.count.is_some(),
-                "row does not contain count"
-            );
-        }
-
         Ok(AggregatesReply { query: self, rows })
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AggregatesRow {
-    pub sum_price: Option<usize>,
-    pub count: Option<usize>,
+    pub sum_price: usize,
+    pub count: usize,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct AggregatesReply {
     query: AggregatesQuery,
     rows: Vec<AggregatesRow>,
@@ -173,10 +177,10 @@ impl Serialize for AggregatesReply {
                 for aggr in &self.query.aggregates {
                     match aggr {
                         Aggregate::Count => {
-                            values.push(row.count.unwrap().to_string());
+                            values.push(row.count.to_string());
                         }
                         Aggregate::SumPrice => {
-                            values.push(row.sum_price.unwrap().to_string());
+                            values.push(row.sum_price.to_string());
                         }
                     }
                 }
@@ -189,6 +193,26 @@ impl Serialize for AggregatesReply {
         root.serialize_field("rows", &rows)?;
 
         root.end()
+    }
+}
+
+pub struct AggregatesBucket<'a> {
+    pub time: DateTime<Utc>,
+    pub origin: Option<&'a str>,
+    pub brand_id: Option<&'a str>,
+    pub category_id: Option<&'a str>,
+}
+
+impl<'a> Display for AggregatesBucket<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}--{}--{}--{}",
+            self.time.timestamp() / 60,
+            self.origin.unwrap_or(""),
+            self.brand_id.unwrap_or(""),
+            self.category_id.unwrap_or(""),
+        )
     }
 }
 
@@ -213,12 +237,12 @@ mod test {
             .clone()
             .make_reply(vec![
                 AggregatesRow {
-                    sum_price: None,
-                    count: Some(1),
+                    sum_price: 2,
+                    count: 1,
                 },
                 AggregatesRow {
-                    sum_price: Some(2),
-                    count: Some(4),
+                    sum_price: 2,
+                    count: 2,
                 },
             ])
             .unwrap();
@@ -227,23 +251,9 @@ mod test {
         query
             .clone()
             .make_reply(vec![AggregatesRow {
-                sum_price: None,
-                count: Some(1),
+                sum_price: 1,
+                count: 1,
             }])
-            .unwrap_err();
-
-        // Missing "count" aggregate.
-        query
-            .make_reply(vec![
-                AggregatesRow {
-                    sum_price: None,
-                    count: None,
-                },
-                AggregatesRow {
-                    sum_price: Some(2),
-                    count: None,
-                },
-            ])
             .unwrap_err();
     }
 }

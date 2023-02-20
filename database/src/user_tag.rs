@@ -17,6 +17,15 @@ pub enum Action {
     Buy,
 }
 
+impl Action {
+    pub fn db_name(self) -> &'static str {
+        match self {
+            Self::View => "view",
+            Self::Buy => "buy",
+        }
+    }
+}
+
 impl Display for Action {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {

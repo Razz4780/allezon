@@ -12,8 +12,7 @@ struct Args {
     address: SocketAddr,
     kafka_brokers: Vec<SocketAddr>,
     kafka_topic: String,
-    aerospike_user_profiles: SocketAddr,
-    aerospike_aggregates: Vec<SocketAddr>,
+    aerospike_nodes: Vec<SocketAddr>,
 }
 
 #[cfg(feature = "only_echo")]
@@ -24,19 +23,18 @@ struct Args {
 
 #[cfg(not(feature = "only_echo"))]
 async fn run_server(stop: Receiver<()>) -> anyhow::Result<()> {
-    use api_server::{app::App, db_query::DbClient, server::ApiServer};
+    use api_server::{app::App, server::ApiServer};
+    use database::client::DbClient;
     use event_queue::producer::EventProducer;
 
     let args: Args =
         envy::from_env().context("failed to read configuration from environment variables")?;
 
     let producer = EventProducer::new(&args.kafka_brokers, args.kafka_topic)?;
-    let db_client = DbClient::new(args.aerospike_user_profiles, args.aerospike_aggregates).await?;
-    let app = App::new(producer);
+    let db_client = DbClient::new(args.aerospike_nodes).await?;
+    let app = App::new(producer, db_client);
 
-    ApiServer::new(app.into(), db_client.into())
-        .run(args.address, stop)
-        .await
+    ApiServer::new(app.into()).run(args.address, stop).await
 }
 
 #[cfg(feature = "only_echo")]
