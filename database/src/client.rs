@@ -12,12 +12,33 @@ use anyhow::{anyhow, bail, Context};
 use serde_json;
 use std::{cmp::Reverse, net::SocketAddr, sync::Arc};
 
+#[async_trait::async_trait]
+pub trait DbClient {
+    async fn get_user_profile(
+        &self,
+        cookie: String,
+        query: UserProfilesQuery,
+    ) -> anyhow::Result<UserProfilesReply>;
+
+    async fn update_user_profile(&self, user_tag: UserTag) -> anyhow::Result<()>;
+
+    async fn get_aggregates(&self, query: AggregatesQuery) -> anyhow::Result<AggregatesReply>;
+
+    async fn update_aggregate<'a>(
+        &self,
+        action: Action,
+        bucket: AggregatesBucket<'a>,
+        count: usize,
+        sum_price: usize,
+    ) -> anyhow::Result<()>;
+}
+
 #[derive(Clone)]
-pub struct DbClient {
+pub struct SimpleDbClient {
     client: Arc<Client>,
 }
 
-impl DbClient {
+impl SimpleDbClient {
     const NAMESPACE: &str = "test";
     const SECONDS_IN_DAY: u32 = 60 * 60 * 24;
     const PROFILE_TAGS_LIMIT: usize = 200;
@@ -56,7 +77,18 @@ impl DbClient {
         serde_json::from_str(tags).context("could not deserialize user tags")
     }
 
-    pub async fn get_user_profile(
+    fn parse_aggregate(record: &Record, aggregate: Aggregate) -> anyhow::Result<usize> {
+        match record.bins.get(aggregate.db_name()) {
+            Some(Value::Int(i)) => usize::try_from(*i).context("invalid integer value"),
+            Some(_) => bail!("expected bin to be an integer"),
+            None => bail!("missing bin"),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DbClient for SimpleDbClient {
+    async fn get_user_profile(
         &self,
         cookie: String,
         query: UserProfilesQuery,
@@ -92,7 +124,7 @@ impl DbClient {
         })
     }
 
-    pub async fn update_profile(&self, user_tag: UserTag) -> anyhow::Result<()> {
+    async fn update_user_profile(&self, user_tag: UserTag) -> anyhow::Result<()> {
         let key = Self::user_profile_key(&user_tag.cookie);
         let action = user_tag.action;
 
@@ -113,7 +145,7 @@ impl DbClient {
 
         tags.push(user_tag);
         tags.sort_unstable_by_key(|tag| Reverse(tag.time));
-        tags.truncate(DbClient::PROFILE_TAGS_LIMIT);
+        tags.truncate(Self::PROFILE_TAGS_LIMIT);
 
         let as_str = serde_json::to_string(&tags).context("failed to serialize tags list")?;
 
@@ -130,15 +162,7 @@ impl DbClient {
         Ok(())
     }
 
-    fn parse_aggregate(record: &Record, aggregate: Aggregate) -> anyhow::Result<usize> {
-        match record.bins.get(aggregate.db_name()) {
-            Some(Value::Int(i)) => usize::try_from(*i).context("invalid integer value"),
-            Some(_) => bail!("expected bin to be an integer"),
-            None => bail!("missing bin"),
-        }
-    }
-
-    pub async fn get_aggregates(&self, query: AggregatesQuery) -> anyhow::Result<AggregatesReply> {
+    async fn get_aggregates(&self, query: AggregatesQuery) -> anyhow::Result<AggregatesReply> {
         let batch_reads = query
             .time_range
             .bucket_starts()
@@ -182,10 +206,10 @@ impl DbClient {
         query.make_reply(rows)
     }
 
-    pub async fn update_aggregate(
+    async fn update_aggregate<'a>(
         &self,
         action: Action,
-        bucket: AggregatesBucket<'_>,
+        bucket: AggregatesBucket<'a>,
         count: usize,
         sum_price: usize,
     ) -> anyhow::Result<()> {

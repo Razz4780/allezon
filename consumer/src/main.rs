@@ -1,13 +1,17 @@
 use anyhow::Context;
-use consumer::aggregates::{AggregatesFilter, AggregatesProcessor};
-use consumer::user_profiles::UserProfilesProcessor;
-use database::client::DbClient;
+use consumer::{
+    aggregates::{AggregatesFilter, AggregatesProcessor},
+    user_profiles::UserProfilesProcessor,
+};
+use database::{client::SimpleDbClient, retrying_client::RetryingClient};
 use event_queue::consumer::EventStream;
 use serde::Deserialize;
-use std::net::SocketAddr;
-use std::process::ExitCode;
-use tokio::sync::watch::{self, Receiver};
-use tokio::{signal, task};
+use std::{net::SocketAddr, process::ExitCode, time::Duration};
+use tokio::{
+    signal,
+    sync::watch::{self, Receiver},
+    task,
+};
 
 #[derive(Deserialize)]
 struct Args {
@@ -15,13 +19,17 @@ struct Args {
     kafka_group_base: String,
     kafka_topic: String,
     aerospike_nodes: Vec<SocketAddr>,
+    update_retry_limit_ms: u64,
 }
 
 async fn run_consumers(mut stop: Receiver<bool>) -> anyhow::Result<()> {
     let args: Args =
         envy::from_env().context("failed to parse config from environment variables")?;
 
-    let db_client = DbClient::new(args.aerospike_nodes).await?;
+    let db_client = RetryingClient::new(
+        SimpleDbClient::new(args.aerospike_nodes).await?,
+        Duration::from_millis(args.update_retry_limit_ms),
+    );
     let filters = AggregatesFilter::all();
 
     let mut tasks = Vec::with_capacity(filters.len() + 1);

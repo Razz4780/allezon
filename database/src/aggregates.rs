@@ -196,6 +196,7 @@ impl Serialize for AggregatesReply {
     }
 }
 
+#[derive(Clone)]
 pub struct AggregatesBucket<'a> {
     pub time: DateTime<Utc>,
     pub origin: Option<&'a str>,

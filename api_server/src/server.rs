@@ -1,6 +1,9 @@
 use crate::app::App;
 use anyhow::Context;
-use database::{aggregates::AggregatesQuery, user_profiles::UserProfilesQuery, user_tag::UserTag};
+use database::{
+    aggregates::AggregatesQuery, client::DbClient, user_profiles::UserProfilesQuery,
+    user_tag::UserTag,
+};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::oneshot::Receiver;
 use warp::{filters::BoxedFilter, http::StatusCode, reply::Response, Filter, Reply};
@@ -10,7 +13,7 @@ pub struct ApiServer {
 }
 
 impl ApiServer {
-    async fn create_tag(app: Arc<App>, user_tag: UserTag) -> Response {
+    async fn create_tag<C: DbClient>(app: Arc<App<C>>, user_tag: UserTag) -> Response {
         match app.create_user_tag(&user_tag).await {
             Ok(()) => {
                 let response = warp::reply::json(&user_tag);
@@ -27,7 +30,11 @@ impl ApiServer {
         }
     }
 
-    async fn get_user_profile(app: Arc<App>, cookie: String, query: UserProfilesQuery) -> Response {
+    async fn get_user_profile<C: DbClient>(
+        app: Arc<App<C>>,
+        cookie: String,
+        query: UserProfilesQuery,
+    ) -> Response {
         match app.get_user_profile(cookie, query).await {
             Ok(reply) => {
                 let response = warp::reply::json(&reply);
@@ -44,7 +51,10 @@ impl ApiServer {
         }
     }
 
-    async fn get_aggregates(app: Arc<App>, query: Vec<(String, String)>) -> Response {
+    async fn get_aggregates<C: DbClient>(
+        app: Arc<App<C>>,
+        query: Vec<(String, String)>,
+    ) -> Response {
         let Some(query) = AggregatesQuery::from_pairs(query) else {
             return StatusCode::BAD_REQUEST.into_response();
         };
@@ -65,7 +75,7 @@ impl ApiServer {
         }
     }
 
-    pub fn new(app: Arc<App>) -> Self {
+    pub fn new<C: 'static + DbClient + Send + Sync>(app: Arc<App<C>>) -> Self {
         let with_state = warp::any().map(move || app.clone());
 
         let user_tags = warp::path("user_tags")

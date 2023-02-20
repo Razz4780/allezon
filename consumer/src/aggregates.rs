@@ -47,19 +47,19 @@ impl Display for AggregatesFilter {
     }
 }
 
-pub struct AggregatesProcessor {
+pub struct AggregatesProcessor<C> {
     filter: AggregatesFilter,
-    db_client: DbClient,
+    db_client: C,
 }
 
-impl AggregatesProcessor {
-    pub fn new(filter: AggregatesFilter, db_client: DbClient) -> Self {
+impl<C> AggregatesProcessor<C> {
+    pub fn new(filter: AggregatesFilter, db_client: C) -> Self {
         Self { filter, db_client }
     }
 }
 
 #[async_trait::async_trait]
-impl EventProcessor for AggregatesProcessor {
+impl<C: DbClient + Send + Sync> EventProcessor for AggregatesProcessor<C> {
     type Event = UserTag;
 
     async fn process(&self, tag: UserTag) -> anyhow::Result<()> {

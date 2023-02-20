@@ -6,13 +6,13 @@ use database::{
 };
 use event_queue::producer::EventProducer;
 
-pub struct App {
+pub struct App<C> {
     producer: EventProducer,
-    db_client: DbClient,
+    db_client: C,
 }
 
-impl App {
-    pub fn new(producer: EventProducer, db_client: DbClient) -> Self {
+impl<C: DbClient> App<C> {
+    pub fn new(producer: EventProducer, db_client: C) -> Self {
         Self {
             producer,
             db_client,
