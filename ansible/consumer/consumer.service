@@ -1,7 +1,3 @@
-[Unit]
-Requires=kafka.service aerospike.service
-After=kafka.service aerospike.service
-
 [Service]
 Type=simple
 User=allezon

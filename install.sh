@@ -27,4 +27,4 @@ install target/release/consumer ansible/consumer/
 
 cd ansible
 sed "s/XXX/$1/g" hosts.yaml > hosts_tmp.yaml
-ansible-playbook --extra-vars "ansible_user=$1 ansible_password=$2 ansible_ssh_extra_args='-o StrictHostKeyChecking=no'" -i hosts_tmp.yaml allezon.yaml
+ansible-playbook --extra-vars "ansible_user=$1 ansible_password=$2 ansible_ssh_extra_args='-o StrictHostKeyChecking=no'" -i hosts_tmp.yaml full.yaml

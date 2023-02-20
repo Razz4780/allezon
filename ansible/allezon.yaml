@@ -1,120 +1,20 @@
-- name: Setup aerospike
-  any_errors_fatal: true
-  hosts: aerospike
-  include_tasks: aerospike/aerospike.yaml
-
-- name: Setup kafka
-  any_errors_fatal: true
-  hosts: kafka
-  inckude_tasks: kafka/kafka.yaml
-
-- name: Setup allezon
-  any_errors_fatal: true
-  hosts: allezon
-  tasks:
-  - name: Ensure group "allezon" exists
-    become: true
-    group:
-      name: allezon
-      state: present
-  - name: Ensure user "allezon" exists
-    become: true
-    user:
-      name: allezon
-      home: /opt/allezon
-      state: present
-      group: allezon
-  - name: Create allezon home directory
-    become: true
-    file:
-      path: /opt/allezon
-      state: directory
-      mode: 0755
-      owner: allezon
-      group: allezon
-
-- name: Setup api_server
-  any_errors_fatal: true
-  hosts: api_server
-  tasks:
-  - name: Copy api_server executable
-    become: true
-    copy:
-      src: api_server/api_server
-      dest: /opt/allezon/api_server
-      owner: allezon
-      group: allezon
-      mode: 0744
-  - name: Copy api_server config file
-    become: true
-    register: service_conf
-    template:
-      src: api_server/api_server_start.sh.j2
-      dest: /opt/allezon/api_server_start.sh
-      owner: allezon
-      group: allezon
-      mode: 0744
-  - name: Copy api_server service file
-    become: true
-    copy:
-      src: api_server/api_server.service
-      dest: /etc/systemd/system/api_server.service
-      owner: root
-      group: root
-      mode: 0644
-  - name: Ensure api_server daemon are enabled
-    become: true
-    systemd:
-      name: api_server
-      state: started
-      enabled: yes
-  - name: Restart api_server daemon on config change
-    become: true
-    become_user: root
-    systemd:
-      name: api_server 
-      state: restarted
-    when: service_conf.results[1].changed
-
-- name: Setup consumer
-  any_errors_fatal: true
-  hosts: consumer
-  tasks:
-  - name: Copy consumer executable
-    become: true
-    copy:
-      src: consumer/consumer
-      dest: /opt/allezon/consumer
-      owner: allezon
-      group: allezon
-      mode: 0744
-  - name: Copy consumer config file
-    become: true
-    register: service_conf
-    template:
-      src: consumer/consumer_start.sh.j2
-      dest: /opt/allezon/consumer_start.sh
-      owner: allezon
-      group: allezon
-      mode: 0744
-  - name: Copy consumer service file
-    become: true
-    copy:
-      src: consumer/consumer.service
-      dest: /etc/systemd/system/consumer.service
-      owner: root
-      group: root
-      mode: 0644
-  - name: Ensure consumer daemon are enabled
-    become: true
-    systemd:
-      name: consumer
-      state: started
-      enabled: yes
-  - name: Restart consumer daemon on config change
-    become: true
-    become_user: root
-    systemd:
-      name: consumer 
-      state: restarted
-    when: service_conf.results[1].changed
+- name: Ensure group "allezon" exists
+  become: true
+  group:
+    name: allezon
+    state: present
+- name: Ensure user "allezon" exists
+  become: true
+  user:
+    name: allezon
+    home: /opt/allezon
+    state: present
+    group: allezon
+- name: Create allezon home directory
+  become: true
+  file:
+    path: /opt/allezon
+    state: directory
+    mode: 0755
+    owner: allezon
+    group: allezon

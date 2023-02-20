@@ -143,15 +143,6 @@
     state: restarted
   when: service_conf.changed
 
-- name: Create user_tags kafka topic
-  become: true
-  any_errors_fatal: true
-  tasks:
-  - name: Check if user_tags topic exists
-    register: kafka_topics
-    command:
-      cmd: "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
-  - name: Create user_tags topic
-    command:
-      cmd: "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic user_tags --partitions 6"
-    when: "'user_tags' not in kafka_topics.stdout_lines"
+- name: Create user_tags topic
+  command:
+    cmd: "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic user_tags --partitions 6"
