@@ -14,9 +14,14 @@ pub struct RetryingClient {
 }
 
 impl RetryingClient {
-    pub fn new(client: SimpleDbClient, max_elapsed_time: Duration) -> Self {
+    pub fn new(
+        client: SimpleDbClient,
+        max_elapsed_time: Duration,
+        initial_backoff: Duration,
+    ) -> Self {
         let backoff = ExponentialBackoffBuilder::default()
             .with_max_elapsed_time(max_elapsed_time.into())
+            .with_initial_interval(initial_backoff)
             .build();
 
         Self { client, backoff }

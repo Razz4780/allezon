@@ -1,14 +1,18 @@
-use anyhow::Context;
+use anyhow::{bail, Context};
 use database::{
     aggregates::AggregatesBucket,
     client::DbClient,
     user_tag::{Action, UserTag},
 };
 use event_queue::consumer::{EventStream, SubStream};
-use futures_util::TryStreamExt;
+use futures_util::{stream, StreamExt, TryStreamExt};
 use std::{
     collections::HashMap,
     fmt::{self, Display, Formatter},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 use tokio::{sync::watch::Receiver, time};
@@ -79,12 +83,12 @@ impl<C> AggregatesProcessor<C> {
     }
 }
 
-impl<C: DbClient + Send + Sync> AggregatesProcessor<C> {
+impl<C: DbClient + Send + Sync + Clone> AggregatesProcessor<C> {
     pub async fn run(mut self, stream: EventStream) -> anyhow::Result<()> {
         let events = stream.events::<UserTag>();
         tokio::pin!(events);
 
-        let mut ticker = time::interval(Duration::from_secs(15));
+        let mut ticker = time::interval(Duration::from_secs(12));
 
         loop {
             tokio::select! {
@@ -103,8 +107,25 @@ impl<C: DbClient + Send + Sync> AggregatesProcessor<C> {
                     *offset = event.offset;
                 }
                 _ = ticker.tick() => {
-                    for ((action, bucket), (count, sum_price)) in self.to_store.drain() {
-                        self.db_client.update_aggregate(action, bucket, count, sum_price).await.context("failed to update aggregate")?;
+                    let error_flag = Arc::new(AtomicBool::new(false));
+                    stream::iter(self.to_store.drain())
+                        .for_each_concurrent(200, |((action, bucket), (count, sum_price))| {
+                            let client = self.db_client.clone();
+                            let error_flag = error_flag.clone();
+                            async move {
+                                let res = client
+                                    .update_aggregate(action, bucket, count, sum_price)
+                                    .await;
+                                if let Err(e) = res {
+                                    log::error!("Failed to update aggregate: {:?}", e);
+                                    error_flag.store(true, Ordering::Relaxed);
+                                }
+                            }
+                        })
+                        .await;
+
+                    if error_flag.load(Ordering::Relaxed) {
+                        bail!("Aggregates update failed");
                     }
 
                     for (substream, offset) in self.to_mark.drain() {

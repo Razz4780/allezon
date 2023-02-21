@@ -29,6 +29,7 @@ async fn run_consumers(mut stop: Receiver<bool>) -> anyhow::Result<()> {
     let db_client = RetryingClient::new(
         SimpleDbClient::new(args.aerospike_nodes).await?,
         Duration::from_millis(args.update_retry_limit_ms),
+        Duration::from_millis(args.update_retry_limit_ms / 5),
     );
     let filters = AggregatesFilter::all();
 
