@@ -6,14 +6,6 @@
     include_tasks:
       file: aerospike/aerospike.yaml
 
-- name: Setup kafka
-  any_errors_fatal: true
-  hosts: kafka
-  tasks:
-  - name: Install
-    include_tasks:
-      file: kafka/kafka.yaml
-
 - name: Setup api_server
   any_errors_fatal: true
   hosts: api_server
@@ -54,49 +46,6 @@
     become: true
     systemd:
       name: api_server
-      state: started
-      enabled: yes
-
-- name: Setup consumer
-  any_errors_fatal: true
-  hosts: consumer
-  tasks:
-  - name: Setup allezon
-    include_tasks:
-      file: allezon.yaml
-  - name: Copy consumer executable
-    become: true
-    copy:
-      src: consumer/consumer
-      dest: /opt/allezon/consumer
-      owner: allezon
-      group: allezon
-      mode: 0744
-  - name: Copy consumer config file
-    become: true
-    template:
-      src: consumer/consumer_start.sh.j2
-      dest: /opt/allezon/consumer_start.sh
-      owner: allezon
-      group: allezon
-      mode: 0744
-  - name: Copy consumer service file
-    become: true
-    copy:
-      src: consumer/consumer.service
-      dest: /etc/systemd/system/consumer.service
-      owner: root
-      group: root
-      mode: 0644
-  - name: Restart consumer daemon
-    become: true
-    systemd:
-      name: consumer
-      state: restarted
-  - name: Ensure consumer daemon is enabled
-    become: true
-    systemd:
-      name: consumer
       state: started
       enabled: yes
 

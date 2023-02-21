@@ -172,11 +172,13 @@ impl DbClient for SimpleDbClient {
         let batch_reads = query
             .time_range
             .bucket_starts()
-            .map(|time| AggregatesBucket {
-                time,
-                origin: query.origin.clone(),
-                brand_id: query.origin.clone(),
-                category_id: query.category_id.clone(),
+            .map(|time| {
+                AggregatesBucket::new(
+                    time,
+                    query.origin.clone(),
+                    query.origin.clone(),
+                    query.category_id.clone(),
+                )
             })
             .map(|user_key| {
                 let key = as_key!(

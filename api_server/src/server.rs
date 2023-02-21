@@ -14,7 +14,7 @@ pub struct ApiServer {
 
 impl ApiServer {
     async fn create_tag<C: DbClient>(app: Arc<App<C>>, user_tag: UserTag) -> Response {
-        match app.create_user_tag(&user_tag).await {
+        match app.save_user_tag(user_tag.clone()).await {
             Ok(()) => {
                 let response = warp::reply::json(&user_tag);
                 let response = warp::reply::with_status(response, StatusCode::NO_CONTENT);
@@ -24,7 +24,7 @@ impl ApiServer {
                 response.into_response()
             }
             Err(e) => {
-                log::error!("Failed to create user tag {:?}: {:?}", user_tag, e);
+                log::error!("Failed to save user tag {:?}: {:?}", user_tag, e);
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
             }
         }

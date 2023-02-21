@@ -10,9 +10,10 @@ use tokio::{
 #[derive(Deserialize, Debug)]
 struct Args {
     address: SocketAddr,
-    kafka_brokers: Vec<SocketAddr>,
-    kafka_topic: String,
     aerospike_nodes: Vec<SocketAddr>,
+    db_write_timeout_ms: u64,
+    db_write_initial_backoff_ms: u64,
+    aggr_pusher_interval_ms: u64,
 }
 
 #[cfg(feature = "only_echo")]
@@ -24,17 +25,34 @@ struct Args {
 #[cfg(not(feature = "only_echo"))]
 async fn run_server(stop: Receiver<()>) -> anyhow::Result<()> {
     use api_server::{app::App, server::ApiServer};
-    use database::client::SimpleDbClient;
-    use event_queue::producer::EventProducer;
+    use database::{client::SimpleDbClient, retrying_client::RetryingClient};
+    use std::{
+        sync::{atomic::Ordering, Arc},
+        time::Duration,
+    };
 
     let args: Args =
         envy::from_env().context("failed to read configuration from environment variables")?;
 
-    let producer = EventProducer::new(&args.kafka_brokers, args.kafka_topic)?;
-    let db_client = SimpleDbClient::new(args.aerospike_nodes).await?;
-    let app = App::new(producer, db_client);
+    let db_client = RetryingClient::new(
+        SimpleDbClient::new(args.aerospike_nodes).await?,
+        Duration::from_millis(args.db_write_timeout_ms),
+        Duration::from_millis(args.db_write_initial_backoff_ms),
+    );
+    let app = Arc::new(App::new(db_client));
+    let worker = app
+        .clone()
+        .worker(Duration::from_millis(args.aggr_pusher_interval_ms));
+    let stop_flag = worker.stop_flag();
+    let worker_task = tokio::spawn(worker.run());
 
-    ApiServer::new(app.into()).run(args.address, stop).await
+    ApiServer::new(app.clone())
+        .run(args.address, stop)
+        .await
+        .context("api server failed")?;
+
+    stop_flag.store(true, Ordering::Relaxed);
+    worker_task.await.context("worker task panicked")
 }
 
 #[cfg(feature = "only_echo")]
