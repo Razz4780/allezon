@@ -23,7 +23,6 @@ fi
 . ~/.cargo/env
 cargo build --release
 install target/release/api_server ansible/api_server/
-install target/release/consumer ansible/consumer/
 
 cd ansible
 sed "s/XXX/$1/g" hosts.yaml > hosts_tmp.yaml
