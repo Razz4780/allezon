@@ -34,6 +34,7 @@ impl ApiServer {
         app: Arc<App<C>>,
         cookie: String,
         query: UserProfilesQuery,
+        _body: warp::hyper::body::Bytes,
     ) -> Response {
         match app.get_user_profile(cookie, query).await {
             Ok(reply) => {
@@ -54,6 +55,7 @@ impl ApiServer {
     async fn get_aggregates<C: DbClient>(
         app: Arc<App<C>>,
         query: Vec<(String, String)>,
+        _body: warp::hyper::body::Bytes,
     ) -> Response {
         let Some(query) = AggregatesQuery::from_pairs(query) else {
             return StatusCode::BAD_REQUEST.into_response();
@@ -91,6 +93,7 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
+            .and(warp::body::bytes())
             .then(Self::get_user_profile);
 
         let aggregates = warp::path("aggregates")
@@ -98,6 +101,7 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
+            .and(warp::body::bytes())
             .then(Self::get_aggregates);
 
         let filter = user_tags
