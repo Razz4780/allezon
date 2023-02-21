@@ -32,6 +32,7 @@ impl ApiServer {
         db_client: DbClient,
         cookie: String,
         query: UserProfilesQuery,
+        _body: warp::hyper::body::Bytes,
     ) -> Response {
         match db_client.get_user_profile(cookie, query).await {
             Ok(reply) => {
@@ -65,6 +66,7 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
+            .and(warp::body::bytes())
             .then(Self::user_profiles);
 
         let filter = user_tags.or(user_profiles).unify().boxed();
