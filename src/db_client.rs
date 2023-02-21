@@ -1,8 +1,11 @@
+use crate::aggregates::{
+    Aggregate, AggregatesBucket, AggregatesQuery, AggregatesReply, AggregatesRow,
+};
 use crate::user_profiles::{UserProfilesQuery, UserProfilesReply};
 use crate::user_tag::{Action, UserTag};
 use aerospike::{
-    as_bin, as_key, Bins, Client, ClientPolicy, Error, ErrorKind, Expiration, GenerationPolicy,
-    Key, ReadPolicy, Record, ResultCode, Value, WritePolicy,
+    as_bin, as_key, BatchPolicy, BatchRead, Bins, Client, ClientPolicy, Error, ErrorKind,
+    Expiration, GenerationPolicy, Key, ReadPolicy, Record, ResultCode, Value, WritePolicy,
 };
 use anyhow::{anyhow, bail, Context};
 use std::cmp::Reverse;
@@ -16,6 +19,7 @@ pub struct DbClient {
 
 impl DbClient {
     const NAMESPACE: &str = "allezon";
+    const SECONDS_IN_DAY: u32 = 60 * 60 * 24;
     const PROFILE_TAGS_LIMIT: usize = 200;
 
     pub async fn new(addr: SocketAddr) -> anyhow::Result<Self> {
@@ -42,9 +46,17 @@ impl DbClient {
         serde_json::from_str(tags).context("could not deserialize user tags")
     }
 
-    pub async fn create_user_tag(&self, user_tag: &UserTag) -> anyhow::Result<()> {
+    fn parse_aggregate(record: &Record, aggregate: Aggregate) -> anyhow::Result<usize> {
+        match record.bins.get(aggregate.db_name()) {
+            Some(Value::Int(i)) => usize::try_from(*i).context("invalid integer value"),
+            Some(_) => bail!("expected bin to be an integer"),
+            None => bail!("missing bin"),
+        }
+    }
+
+    pub async fn update_user_profile(&self, user_tag: UserTag) -> anyhow::Result<()> {
         loop {
-            match self.update_user_profile(user_tag.clone()).await {
+            match self.try_update_user_profile(user_tag.clone()).await {
                 Ok(true) => return Ok(()),
                 Ok(false) => {}
                 Err(e) => return Err(e),
@@ -94,7 +106,7 @@ impl DbClient {
         })
     }
 
-    async fn update_user_profile(&self, user_tag: UserTag) -> anyhow::Result<bool> {
+    async fn try_update_user_profile(&self, user_tag: UserTag) -> anyhow::Result<bool> {
         let key = Self::user_profile_key(&user_tag.cookie);
         let action = user_tag.action;
 
@@ -128,6 +140,114 @@ impl DbClient {
             Ok(_) => Ok(true),
             Err(Error(ErrorKind::ServerError(ResultCode::GenerationError), _)) => Ok(false),
             Err(e) => bail!("failed to update profile: {:?}", e),
+        }
+    }
+
+    pub async fn get_aggregates(&self, query: AggregatesQuery) -> anyhow::Result<AggregatesReply> {
+        let batch_reads = query
+            .time_range
+            .bucket_starts()
+            .map(|time| {
+                AggregatesBucket::new(
+                    time,
+                    query.origin.clone(),
+                    query.origin.clone(),
+                    query.category_id.clone(),
+                )
+            })
+            .map(|user_key| {
+                let key = as_key!(
+                    Self::NAMESPACE,
+                    query.action.db_name(),
+                    user_key.to_string()
+                );
+                BatchRead::new(key, Bins::All)
+            })
+            .collect::<Vec<_>>();
+
+        let reads = self
+            .client
+            .batch_get(&BatchPolicy::default(), batch_reads)
+            .await
+            .map_err(|e| anyhow!("could not get aggregates: {:?}", e))?;
+
+        let rows = reads
+            .iter()
+            .map(|read| read.record.as_ref())
+            .map(|record| match record {
+                Some(record) => Ok(AggregatesRow {
+                    sum_price: Self::parse_aggregate(record, Aggregate::SumPrice).with_context(
+                        || format!("failed to parse {} value", Aggregate::SumPrice),
+                    )?,
+                    count: Self::parse_aggregate(record, Aggregate::Count)
+                        .with_context(|| format!("failed to parse {} value", Aggregate::Count))?,
+                }),
+                None => Ok(AggregatesRow::default()),
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        query.make_reply(rows)
+    }
+
+    pub async fn update_aggregate(
+        &self,
+        action: Action,
+        bucket: &AggregatesBucket,
+        count: usize,
+        sum_price: usize,
+    ) -> anyhow::Result<()> {
+        loop {
+            match self
+                .try_update_aggregate(action, bucket, count, sum_price)
+                .await
+            {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    async fn try_update_aggregate(
+        &self,
+        action: Action,
+        bucket: &AggregatesBucket,
+        count: usize,
+        sum_price: usize,
+    ) -> anyhow::Result<bool> {
+        let key = as_key!(Self::NAMESPACE, action.db_name(), bucket.to_string());
+
+        let request_res = self
+            .client
+            .get(&ReadPolicy::default(), &key, Bins::All)
+            .await;
+        let (old_count, old_sum_price, generation) = match request_res {
+            Ok(record) => {
+                let count = Self::parse_aggregate(&record, Aggregate::Count)
+                    .with_context(|| format!("failed to parse {} value", Aggregate::Count))?;
+                let sum_price = Self::parse_aggregate(&record, Aggregate::SumPrice)
+                    .with_context(|| format!("failed to parse {} value", Aggregate::SumPrice))?;
+                (count, sum_price, record.generation)
+            }
+            Err(Error(ErrorKind::ServerError(ResultCode::KeyNotFoundError), _)) => {
+                Default::default()
+            }
+            Err(e) => bail!("failed to fetch profile {:?}", e),
+        };
+
+        let mut policy = WritePolicy::new(generation, Expiration::Seconds(Self::SECONDS_IN_DAY));
+        policy.generation_policy = GenerationPolicy::ExpectGenEqual;
+
+        let count = as_bin!(Aggregate::Count.db_name(), (old_count + count) as i64);
+        let sum_price = as_bin!(
+            Aggregate::SumPrice.db_name(),
+            (old_sum_price + sum_price) as i64
+        );
+
+        match self.client.put(&policy, &key, &[count, sum_price]).await {
+            Ok(_) => Ok(true),
+            Err(Error(ErrorKind::ServerError(ResultCode::GenerationError), _)) => Ok(false),
+            Err(e) => bail!("failed to update aggregate: {:?}", e),
         }
     }
 }

@@ -24,10 +24,8 @@ impl<const BUCKETS: bool> TimeRange<BUCKETS> {
 
 pub type SimpleTimeRange = TimeRange<false>;
 
-#[allow(dead_code)]
 pub type BucketsRange = TimeRange<true>;
 
-#[allow(dead_code)]
 impl BucketsRange {
     pub fn buckets_count(&self) -> usize {
         (self.to - self.from).num_minutes().try_into().unwrap()
