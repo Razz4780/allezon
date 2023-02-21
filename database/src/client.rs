@@ -67,7 +67,7 @@ impl SimpleDbClient {
 
     fn parse_user_tags(record: &Record, action: Action) -> anyhow::Result<Vec<UserTag>> {
         let Some(bin) = record.bins.get(action.db_name()) else {
-            bail!("bin not found");
+            return Ok(vec![]);
         };
 
         let Value::String(tags) = bin else {
