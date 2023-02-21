@@ -42,14 +42,13 @@ impl AggregatesFilter {
 
 impl AggregatesFilter {
     fn make_bucket(&self, tag: &UserTag) -> AggregatesBucket {
-        AggregatesBucket {
-            time: tag.time,
-            origin: self.origin.then(|| tag.origin.clone()),
-            brand_id: self.brand_id.then(|| tag.product_info.brand_id.clone()),
-            category_id: self
-                .category_id
+        AggregatesBucket::new(
+            tag.time,
+            self.origin.then(|| tag.origin.clone()),
+            self.brand_id.then(|| tag.product_info.brand_id.clone()),
+            self.category_id
                 .then(|| tag.product_info.category_id.clone()),
-        }
+        )
     }
 }
 

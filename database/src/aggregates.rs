@@ -198,10 +198,26 @@ impl Serialize for AggregatesReply {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct AggregatesBucket {
-    pub time: DateTime<Utc>,
-    pub origin: Option<String>,
-    pub brand_id: Option<String>,
-    pub category_id: Option<String>,
+    timestamp: i64,
+    origin: Option<String>,
+    brand_id: Option<String>,
+    category_id: Option<String>,
+}
+
+impl AggregatesBucket {
+    pub fn new(
+        time: DateTime<Utc>,
+        origin: Option<String>,
+        brand_id: Option<String>,
+        category_id: Option<String>,
+    ) -> Self {
+        Self {
+            timestamp: time.timestamp() / 60,
+            origin,
+            brand_id,
+            category_id,
+        }
+    }
 }
 
 impl Display for AggregatesBucket {
@@ -209,7 +225,7 @@ impl Display for AggregatesBucket {
         write!(
             f,
             "{}--{}--{}--{}",
-            self.time.timestamp() / 60,
+            self.timestamp,
             self.origin.as_deref().unwrap_or(""),
             self.brand_id.as_deref().unwrap_or(""),
             self.category_id.as_deref().unwrap_or(""),
