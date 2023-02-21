@@ -242,8 +242,11 @@ impl DbClient for SimpleDbClient {
         let mut policy = WritePolicy::new(generation, Expiration::Seconds(Self::SECONDS_IN_DAY));
         policy.generation_policy = GenerationPolicy::ExpectGenEqual;
 
-        let count = as_bin!(Aggregate::Count.db_name(), old_count + count);
-        let sum_price = as_bin!(Aggregate::SumPrice.db_name(), old_sum_price + sum_price);
+        let count = as_bin!(Aggregate::Count.db_name(), (old_count + count) as i64);
+        let sum_price = as_bin!(
+            Aggregate::SumPrice.db_name(),
+            (old_sum_price + sum_price) as i64
+        );
 
         self.client
             .put(&policy, &key, &[count, sum_price])
