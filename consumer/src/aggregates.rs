@@ -109,7 +109,7 @@ impl<C: DbClient + Send + Sync + Clone> AggregatesProcessor<C> {
                 _ = ticker.tick() => {
                     let error_flag = Arc::new(AtomicBool::new(false));
                     stream::iter(self.to_store.drain())
-                        .for_each_concurrent(200, |((action, bucket), (count, sum_price))| {
+                        .for_each_concurrent(10, |((action, bucket), (count, sum_price))| {
                             let client = self.db_client.clone();
                             let error_flag = error_flag.clone();
                             async move {
