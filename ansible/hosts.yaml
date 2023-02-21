@@ -6,19 +6,9 @@ aerospike:
     - "view"
     - "buy"
     - "profiles"
-kafka:
+api_server:
   hosts:
-    "XXXvm1[07:09].rtb-lab.pl"
-allezon:
-  children:
-    api_server:
-      hosts:
-        "XXXvm1[07:10].rtb-lab.pl"
-    consumer:
-      hosts:
-        "XXXvm1[01:06].rtb-lab.pl"
-      vars:
-        kafka_group_base: "consumer_"
+    "XXXvm1[09:10].rtb-lab.pl"
 nginx:
   hosts:
     "XXXvm110.rtb-lab.pl"
