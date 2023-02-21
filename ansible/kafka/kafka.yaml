@@ -132,7 +132,7 @@
     name: kafka
     state: restarted
 
-  - name: Ensure the kafka daemon is enabled
+- name: Ensure the kafka daemon is enabled
   become: true
   systemd:
     name: kafka
