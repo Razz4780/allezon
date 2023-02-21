@@ -34,17 +34,9 @@ impl ApiServer {
         app: Arc<App<C>>,
         cookie: String,
         query: UserProfilesQuery,
-        expected: warp::hyper::body::Bytes,
     ) -> Response {
         match app.get_user_profile(cookie, query).await {
             Ok(reply) => {
-                // TODO remove me
-                log::warn!(
-                    "HMMMM: got {}, expected {:?}",
-                    serde_json::to_string(&reply).unwrap(),
-                    std::str::from_utf8(&expected.to_vec())
-                );
-
                 let response = warp::reply::json(&reply);
                 let response = warp::reply::with_status(response, StatusCode::OK);
                 let response =
@@ -99,7 +91,6 @@ impl ApiServer {
             .and(warp::query())
             .and(warp::path::end())
             .and(warp::post())
-            .and(warp::body::bytes())
             .then(Self::get_user_profile);
 
         let aggregates = warp::path("aggregates")
