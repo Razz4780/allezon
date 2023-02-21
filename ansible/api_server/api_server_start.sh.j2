@@ -1,0 +1,8 @@
+#!/bin/bash
+
+address={{ ansible_facts.eth0.ipv4.address }}:8082 \
+kafka_brokers={% for host in groups.kafka %}{{ hostvars[host]['ansible_eth0']['ipv4']['address'] }}:9092{% if not loop.last %},{% endif %}{% endfor %} \
+kafka_topic=user_tags \
+aerospike_nodes={% for host in groups.aerospike %}{{ hostvars[host]['ansible_eth0']['ipv4']['address'] }}:3000{% if not loop.last %},{% endif %}{% endfor %} \
+RUST_LOG=warn \
+/opt/allezon/api_server &> /opt/allezon/api_server.log

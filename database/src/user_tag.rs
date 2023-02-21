@@ -2,7 +2,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use std::fmt::{self, Display, Formatter};
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, Eq, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Device {
     Pc,
@@ -10,11 +10,20 @@ pub enum Device {
     Tv,
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Action {
     View,
     Buy,
+}
+
+impl Action {
+    pub fn db_name(self) -> &'static str {
+        match self {
+            Self::View => "view",
+            Self::Buy => "buy",
+        }
+    }
 }
 
 impl Display for Action {
@@ -26,7 +35,7 @@ impl Display for Action {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ProductInfo {
     pub product_id: i32,
     pub brand_id: String,
@@ -34,7 +43,7 @@ pub struct ProductInfo {
     pub price: i32,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct UserTag {
     #[serde(serialize_with = "serialize_datetime")]
     pub time: DateTime<Utc>,
