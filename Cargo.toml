@@ -1,3 +1,0 @@
-[workspace]
-
-members = ["api_server", "event_queue", "consumer", "database"]
