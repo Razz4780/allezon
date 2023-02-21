@@ -15,7 +15,6 @@
 
 - name: Copy config file with owner and permissions
   become: true
-  register: service_conf
   template:
     src: aerospike.conf.j2
     dest: /etc/aerospike/aerospike.conf
@@ -23,19 +22,16 @@
     group: root
     mode: '0644'
 
+- name: Restart daemon
+  become: true
+  systemd:
+    name: aerospike
+    state: restarted
+
 - name: Ensure the Aerospike daemon is enabled
   become: true
-  become_user: root
   systemd:
     name: aerospike
     state: started
     enabled: yes
     daemon_reload: yes
-
-- name: Restart daemon on config change
-  become: true
-  become_user: root
-  systemd:
-    name: aerospike
-    state: restarted
-  when: service_conf.changed

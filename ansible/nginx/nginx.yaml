@@ -25,17 +25,16 @@
     dest: /etc/nginx/sites-enabled/api_proxy.conf
     state: link
 
-- name: Ensure the nginx daemon is enabled
+- name: Restart nginx daemon
+  become: true
+  systemd:
+    name: nginx
+    state: restarted
+
+- name: Ensure nginx daemon is enabled
   become: true
   systemd:
     name: nginx
     state: started
     enabled: yes
     daemon_reload: yes
-
-- name: Restart daemon on config change
-  become: true
-  systemd:
-    name: nginx
-    state: restarted
-  when: service_conf.changed or symlink.changed

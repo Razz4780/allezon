@@ -1,7 +1,7 @@
 use crate::app::App;
 use anyhow::Context;
 use database::{
-    aggregates::AggregatesQuery, client::DbClient, user_profiles::{UserProfilesQuery, UserProfilesReply},
+    aggregates::AggregatesQuery, client::DbClient, user_profiles::UserProfilesQuery,
     user_tag::UserTag,
 };
 use std::{net::SocketAddr, sync::Arc};
@@ -38,7 +38,12 @@ impl ApiServer {
     ) -> Response {
         match app.get_user_profile(cookie, query).await {
             Ok(reply) => {
-                log::warn!("HMMMM: got {}, expected {:?}", serde_json::to_string(&reply).unwrap(), std::str::from_utf8(&expected.to_vec()));
+                // TODO remove me
+                log::warn!(
+                    "HMMMM: got {}, expected {:?}",
+                    serde_json::to_string(&reply).unwrap(),
+                    std::str::from_utf8(&expected.to_vec())
+                );
 
                 let response = warp::reply::json(&reply);
                 let response = warp::reply::with_status(response, StatusCode::OK);

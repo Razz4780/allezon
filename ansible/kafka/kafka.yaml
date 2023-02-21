@@ -85,6 +85,12 @@
     group: root
     mode: 0644
 
+- name: Restart the zookeeper daemon
+  become: true
+  systemd:
+    name: zookeeper
+    state: restarted
+
 - name: Ensure the zookeeper daemon is enabled
   become: true
   systemd:
@@ -93,16 +99,8 @@
     enabled: yes
     daemon_reload: yes
 
-- name: Restart daemon on config change
-  become: true
-  systemd:
-    name: zookeeper
-    state: restarted
-  when: service_conf.changed
-
 - name: Copy config file with owner and permissions
   become: true
-  register: service_conf
   template:
     src: server.properties.j2
     dest: /opt/kafka/config/server.properties
@@ -128,20 +126,19 @@
     group: root
     mode: 0644
 
-- name: Ensure the kafka daemon is enabled
+- name: Restart daemon on config change
+  become: true
+  systemd:
+    name: kafka
+    state: restarted
+
+  - name: Ensure the kafka daemon is enabled
   become: true
   systemd:
     name: kafka
     state: started
     enabled: yes
     daemon_reload: yes
-
-- name: Restart daemon on config change
-  become: true
-  systemd:
-    name: kafka
-    state: restarted
-  when: service_conf.changed
 
 - name: Create user_tags topic
   command:
