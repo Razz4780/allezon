@@ -37,10 +37,11 @@ impl DbClient for RetryingClient {
         backoff::future::retry(self.backoff.clone(), || {
             let user_tag = user_tag.clone();
             async move {
-                self.client
-                    .update_user_profile(user_tag)
-                    .await
-                    .map_err(backoff::Error::transient)
+                let res = self.client.update_user_profile(user_tag).await;
+                if let Some(err) = res.as_ref().err() {
+                    log::warn!("Failed to udpate user profile: {:?}", err);
+                }
+                res.map_err(backoff::Error::transient)
             }
         })
         .await
@@ -61,10 +62,14 @@ impl DbClient for RetryingClient {
         backoff::future::retry(self.backoff.clone(), || {
             let bucket = bucket.clone();
             async move {
-                self.client
+                let res = self
+                    .client
                     .update_aggregate(action, bucket, count, sum_price)
-                    .await
-                    .map_err(backoff::Error::transient)
+                    .await;
+                if let Some(err) = res.as_ref().err() {
+                    log::warn!("Failed to udpate aggregate: {:?}", err);
+                }
+                res.map_err(backoff::Error::transient)
             }
         })
         .await

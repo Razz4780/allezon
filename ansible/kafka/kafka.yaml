@@ -126,7 +126,7 @@
     group: root
     mode: 0644
 
-- name: Restart daemon on config change
+- name: Restart the kafka daemon
   become: true
   systemd:
     name: kafka
