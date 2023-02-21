@@ -15,7 +15,7 @@ pub struct DbClient {
 }
 
 impl DbClient {
-    const NAMESPACE: &str = "test";
+    const NAMESPACE: &str = "allezon";
     const PROFILE_TAGS_LIMIT: usize = 200;
 
     pub async fn new(addr: SocketAddr) -> anyhow::Result<Self> {
