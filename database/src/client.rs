@@ -103,7 +103,7 @@ impl DbClient for SimpleDbClient {
             Ok(record) => {
                 let buys = Self::parse_user_tags(&record, Action::Buy)
                     .with_context(|| format!("failed to parse {} bin", Action::Buy))?;
-                let views = Self::parse_user_tags(&record, Action::Buy)
+                let views = Self::parse_user_tags(&record, Action::View)
                     .with_context(|| format!("failed to parse {} bin", Action::View))?;
 
                 (buys, views)
