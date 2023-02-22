@@ -55,7 +55,7 @@ impl App {
 pub struct Worker {
     app: Arc<App>,
     interval: Duration,
-    aggregates: HashMap<UpdateKey, (usize, usize)>,
+    aggregates: HashMap<UpdateKey, (i64, i64)>,
     receiver: UnboundedReceiver<UserTag>,
 }
 
@@ -87,7 +87,7 @@ impl Worker {
                 bucket,
                 action: tag.action,
             };
-            let price = tag.product_info.price as usize;
+            let price = tag.product_info.price as i64;
             let entry = self.aggregates.entry(key).or_default();
             entry.0 += 1;
             entry.1 += price;
@@ -95,7 +95,7 @@ impl Worker {
     }
 
     async fn push_to_db(
-        aggregates: HashMap<UpdateKey, (usize, usize)>,
+        aggregates: HashMap<UpdateKey, (i64, i64)>,
         db_client: DbClient,
     ) -> anyhow::Result<()> {
         for (key, (count, price)) in aggregates {

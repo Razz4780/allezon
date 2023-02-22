@@ -112,8 +112,8 @@ impl AggregatesQuery {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AggregatesRow {
-    pub sum_price: usize,
-    pub count: usize,
+    pub sum_price: i64,
+    pub count: i64,
 }
 
 #[derive(Debug, PartialEq, Eq)]

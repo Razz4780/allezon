@@ -46,11 +46,38 @@ impl DbClient {
         serde_json::from_str(tags).context("could not deserialize user tags")
     }
 
-    fn parse_aggregate(record: &Record, aggregate: Aggregate) -> anyhow::Result<usize> {
+    fn parse_aggregate(record: &Record, aggregate: Aggregate) -> anyhow::Result<i64> {
         match record.bins.get(aggregate.db_name()) {
-            Some(Value::Int(i)) => usize::try_from(*i).context("invalid integer value"),
+            Some(Value::Int(i)) => Ok(*i),
             Some(_) => bail!("expected bin to be an integer"),
             None => bail!("missing bin"),
+        }
+    }
+
+    fn parse_batch_read(br: BatchRead) -> anyhow::Result<(i64, AggregatesRow)> {
+        let time: i64 = match br.key.user_key {
+            Some(Value::String(user_key)) => {
+                let time = user_key
+                    .split("--")
+                    .next()
+                    .ok_or_else(|| anyhow!("invalid user_key format"))?;
+                time.parse().context("invalid user_key format")?
+            }
+            Some(_) => bail!("invalid user_key type"),
+            None => bail!("could not get user_key"),
+        };
+        match br.record {
+            Some(record) => Ok((
+                time,
+                AggregatesRow {
+                    sum_price: Self::parse_aggregate(&record, Aggregate::SumPrice).with_context(
+                        || format!("failed to parse {} value", Aggregate::SumPrice),
+                    )?,
+                    count: Self::parse_aggregate(&record, Aggregate::Count)
+                        .with_context(|| format!("failed to parse {} value", Aggregate::Count))?,
+                },
+            )),
+            None => Ok((time, (AggregatesRow::default()))),
         }
     }
 
@@ -165,26 +192,17 @@ impl DbClient {
             })
             .collect::<Vec<_>>();
 
-        let reads = self
+        let mut rows = self
             .client
             .batch_get(&BatchPolicy::default(), batch_reads)
             .await
-            .map_err(|e| anyhow!("could not get aggregates: {:?}", e))?;
-
-        let rows = reads
-            .iter()
-            .map(|read| read.record.as_ref())
-            .map(|record| match record {
-                Some(record) => Ok(AggregatesRow {
-                    sum_price: Self::parse_aggregate(record, Aggregate::SumPrice).with_context(
-                        || format!("failed to parse {} value", Aggregate::SumPrice),
-                    )?,
-                    count: Self::parse_aggregate(record, Aggregate::Count)
-                        .with_context(|| format!("failed to parse {} value", Aggregate::Count))?,
-                }),
-                None => Ok(AggregatesRow::default()),
-            })
+            .map_err(|e| anyhow!("could not get aggregates: {:?}", e))?
+            .into_iter()
+            .map(Self::parse_batch_read)
             .collect::<anyhow::Result<Vec<_>>>()?;
+
+        rows.sort_by(|x, y| x.0.cmp(&y.0));
+        let rows = rows.into_iter().map(|(_, row)| row).collect();
 
         query.make_reply(rows)
     }
@@ -193,8 +211,8 @@ impl DbClient {
         &self,
         action: Action,
         bucket: &AggregatesBucket,
-        count: usize,
-        sum_price: usize,
+        count: i64,
+        sum_price: i64,
     ) -> anyhow::Result<()> {
         loop {
             match self
@@ -212,8 +230,8 @@ impl DbClient {
         &self,
         action: Action,
         bucket: &AggregatesBucket,
-        count: usize,
-        sum_price: usize,
+        count: i64,
+        sum_price: i64,
     ) -> anyhow::Result<bool> {
         let key = as_key!(Self::NAMESPACE, action.db_name(), bucket.to_string());
 
@@ -238,11 +256,8 @@ impl DbClient {
         let mut policy = WritePolicy::new(generation, Expiration::Seconds(Self::SECONDS_IN_DAY));
         policy.generation_policy = GenerationPolicy::ExpectGenEqual;
 
-        let count = as_bin!(Aggregate::Count.db_name(), (old_count + count) as i64);
-        let sum_price = as_bin!(
-            Aggregate::SumPrice.db_name(),
-            (old_sum_price + sum_price) as i64
-        );
+        let count = as_bin!(Aggregate::Count.db_name(), old_count + count);
+        let sum_price = as_bin!(Aggregate::SumPrice.db_name(), old_sum_price + sum_price);
 
         match self.client.put(&policy, &key, &[count, sum_price]).await {
             Ok(_) => Ok(true),
