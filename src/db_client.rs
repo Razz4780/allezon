@@ -178,7 +178,7 @@ impl DbClient {
                 let bucket = AggregatesBucket::new(
                     time,
                     query.origin.clone(),
-                    query.origin.clone(),
+                    query.brand_id.clone(),
                     query.category_id.clone(),
                 );
                 let key = as_key!(Self::NAMESPACE, query.action.db_name(), bucket.to_string());
