@@ -1,0 +1,6 @@
+#!/bin/bash
+
+server_addr={{ ansible_facts.eth0.ipv4.address }}:8082 \
+aerospike_addr={{ ansible_facts.eth0.ipv4.address }}:3000 \
+RUST_LOG=warn \
+/opt/allezon/allezon &> /opt/allezon/allezon.log

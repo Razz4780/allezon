@@ -1,3 +1,19 @@
-[workspace]
+[package]
+name = "allezon"
+version = "0.1.0"
+edition = "2021"
 
-members = ["api_server", "event_queue", "consumer"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = { version = "0.4.23", features = ["serde"] }
+warp = "0.3.3"
+tokio = { version = "1.24.2", features = ["rt-multi-thread", "macros"] }
+anyhow = "1.0.68"
+log = "0.4.17"
+env_logger = "0.10.0"
+serde = { version = "1.0.152", features = ["derive"] }
+envy = "0.4.2"
+serde_json = "1.0.91"
+aerospike = { git = "https://github.com/asynos/aerospike-client-rust.git", branch = "async", features = ["rt-tokio"] }
+rand = "0.8.5"

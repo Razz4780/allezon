@@ -1,0 +1,14 @@
+aerospike:
+  hosts:
+    "XXXvm1[01:08].rtb-lab.pl"
+  vars:
+    aerospike_sets:
+    - "view"
+    - "buy"
+    - "profiles"
+allezon:
+  hosts:
+    "XXXvm1[01:08].rtb-lab.pl"
+nginx:
+  hosts:
+    "XXXvm110.rtb-lab.pl"

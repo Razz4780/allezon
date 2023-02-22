@@ -1,0 +1,75 @@
+- name: Setup aerospike
+  any_errors_fatal: true
+  hosts: aerospike
+  tasks:
+  - name: Install aerospike
+    include_tasks:
+      file: aerospike/aerospike.yaml
+
+- name: Setup allezon
+  any_errors_fatal: true
+  hosts: allezon
+  tasks:
+  - name: Ensure group "allezon" exists
+    become: true
+    group:
+      name: allezon
+      state: present
+  - name: Ensure user "allezon" exists
+    become: true
+    user:
+      name: allezon
+      home: /opt/allezon
+      state: present
+      group: allezon
+  - name: Create allezon home directory
+    become: true
+    file:
+      path: /opt/allezon
+      state: directory
+      mode: 0755
+      owner: allezon
+      group: allezon
+  - name: Copy allezon executable
+    become: true
+    copy:
+      src: allezon
+      dest: /opt/allezon/allezon
+      owner: allezon
+      group: allezon
+      mode: 0744
+  - name: Copy allezon config file
+    become: true
+    template:
+      src: allezon_start.sh.j2
+      dest: /opt/allezon/allezon_start.sh
+      owner: allezon
+      group: allezon
+      mode: 0744
+  - name: Copy allezon service file
+    become: true
+    copy:
+      src: allezon.service
+      dest: /etc/systemd/system/allezon.service
+      owner: root
+      group: root
+      mode: 0644
+  - name: Restart allezon daemon
+    become: true
+    systemd:
+      name: allezon
+      state: restarted
+  - name: Ensure allezon daemon is enabled
+    become: true
+    systemd:
+      name: allezon
+      state: started
+      enabled: yes
+
+- name: Setup nginx
+  any_errors_fatal: true
+  hosts: nginx
+  tasks:
+  - name: Install nginx
+    include_tasks:
+      file: nginx/nginx.yaml

@@ -1,0 +1,9 @@
+[Service]
+Type=simple
+User=allezon
+ExecStart=/bin/sh -c 'opt/allezon/allezon_start.sh'
+ExecStop=/bin/sh -c 'killall allezon'
+Restart=on-abnormal
+
+[Install]
+WantedBy=multi-user.target

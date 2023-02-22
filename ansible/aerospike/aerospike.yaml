@@ -1,0 +1,37 @@
+- name: Populate service facts
+  service_facts:
+
+- name: Install aerospike
+  become: true
+  apt:
+    deb: https://github.com/aerospike/aerospike-server/releases/download/6.1.0.8/aerospike-server-community-6.1.0.8.ubuntu20.04.x86_64.deb
+  when: ansible_facts.services['aerospike.service'] is not defined
+
+- name: Create logs directory
+  become: true
+  file:
+     path: /var/log/aerospike
+     state: directory
+
+- name: Copy config file with owner and permissions
+  become: true
+  template:
+    src: aerospike.conf.j2
+    dest: /etc/aerospike/aerospike.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Restart daemon
+  become: true
+  systemd:
+    name: aerospike
+    state: restarted
+
+- name: Ensure the Aerospike daemon is enabled
+  become: true
+  systemd:
+    name: aerospike
+    state: started
+    enabled: yes
+    daemon_reload: yes

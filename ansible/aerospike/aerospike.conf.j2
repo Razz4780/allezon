@@ -1,0 +1,69 @@
+# Aerospike database configuration file for use with systemd.
+
+service {
+    proto-fd-max 15000
+}
+
+logging {
+    file /var/log/aerospike/aerospike.log {
+        context any info
+    }
+}
+
+network {
+    service {
+        address eth0
+        access-address {{ ansible_facts.eth0.ipv4.address }}
+        port 3000
+    }
+
+    heartbeat {
+        mode mesh
+        address eth0
+        port 3002
+
+        {% for srv in groups.aerospike %}
+        mesh-seed-address-port {{ srv }} 3002
+        {% endfor  %}
+
+        interval 150
+        timeout 10
+    }
+
+    fabric {
+        address eth0
+        port 3001
+    }
+
+    info {
+        address eth0
+        port 3003
+    }
+}
+
+mod-lua {
+    user-path /opt/aerospike/usr/udf/lua
+}
+
+namespace allezon {
+    replication-factor 2
+    memory-size 6G
+    nsup-period 15
+
+    stop-writes-pct 92
+    high-water-memory-pct 90
+    high-water-disk-pct 90
+
+    storage-engine device {
+        filesize 20G
+        file /opt/aerospike/data/allezon.dat
+
+        defrag-lwm-pct 90
+        defrag-sleep 50
+    }
+
+    {% for set_name in aerospike_sets %}
+    set {{ set_name }} {
+    }
+    {% endfor %}
+}
