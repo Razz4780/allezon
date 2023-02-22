@@ -2,10 +2,8 @@ use crate::aggregates::AggregatesQuery;
 use crate::app::App;
 use crate::user_profiles::UserProfilesQuery;
 use crate::user_tag::UserTag;
-use anyhow::Context;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::oneshot::Receiver;
 use warp::{filters::BoxedFilter, http::StatusCode, reply::Response, Filter, Reply};
 
 pub struct ApiServer {
@@ -114,17 +112,8 @@ impl ApiServer {
         Self { filter }
     }
 
-    pub async fn run(self, socket: SocketAddr, stop: Receiver<()>) -> anyhow::Result<()> {
-        let stop = async move {
-            stop.await.ok();
-        };
-
-        let (socket, fut) = warp::serve(self.filter)
-            .try_bind_with_graceful_shutdown(socket, stop)
-            .context("failed to start the server")?;
-        log::info!("Server listening on socket {}", socket);
-
-        fut.await;
+    pub async fn run(self, socket: SocketAddr) -> anyhow::Result<()> {
+        warp::serve(self.filter).try_bind(socket).await;
 
         Ok(())
     }

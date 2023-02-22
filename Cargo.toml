@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 chrono = { version = "0.4.23", features = ["serde"] }
 warp = "0.3.3"
-tokio = { version = "1.24.2", features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { version = "1.24.2", features = ["rt-multi-thread", "macros"] }
 anyhow = "1.0.68"
 log = "0.4.17"
 env_logger = "0.10.0"

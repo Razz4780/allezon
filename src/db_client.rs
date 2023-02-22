@@ -175,19 +175,13 @@ impl DbClient {
             .time_range
             .bucket_starts()
             .map(|time| {
-                AggregatesBucket::new(
+                let bucket = AggregatesBucket::new(
                     time,
                     query.origin.clone(),
                     query.origin.clone(),
                     query.category_id.clone(),
-                )
-            })
-            .map(|user_key| {
-                let key = as_key!(
-                    Self::NAMESPACE,
-                    query.action.db_name(),
-                    user_key.to_string()
                 );
+                let key = as_key!(Self::NAMESPACE, query.action.db_name(), bucket.to_string());
                 BatchRead::new(key, Bins::All)
             })
             .collect::<Vec<_>>();
